@@ -1,0 +1,10 @@
+.gradle/
+.idea/
+local.properties
+build/
+app/build/
+app/src/main/jniLibs/arm64-v8a/*.so
+app/src/main/assets/box64-aarch64
+app/src/main/assets/box64.sha256
+app/src/main/assets/box64-x64lib/
+app/src/main/assets/licenses/

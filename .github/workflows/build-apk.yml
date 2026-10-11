@@ -1,0 +1,101 @@
+name: Compilar Bubble BDS Host
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verificar fonte Box64
+        shell: bash
+        run: |
+          echo "71585e05c2f74e32bed783c55e52facf0ed52e9fd64abf39f47240db35cc1e89  third_party/box64-0.4.4.zip" | sha256sum -c -
+
+      - name: Configurar QEMU ARM64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Compilar Box64 0.4.4 para Ubuntu ARM64
+        shell: bash
+        run: |
+          rm -rf .ci-box64
+          mkdir -p .ci-box64/src app/src/main/assets
+          unzip -q third_party/box64-0.4.4.zip -d .ci-box64/src
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD:/work" -w /work ubuntu:24.04 bash -lc '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends build-essential cmake python3 ca-certificates
+              mkdir -p .ci-box64/build
+              cd .ci-box64/build
+              cmake ../src/box64-0.4.4 \
+                -DARM64=1 \
+                -DBAD_SIGNAL=ON \
+                -DCMAKE_BUILD_TYPE=Release
+              make -j2 box64
+            '
+          test -f .ci-box64/build/box64
+          file .ci-box64/build/box64
+          cp .ci-box64/build/box64 app/src/main/assets/box64-aarch64
+          rm -rf app/src/main/assets/box64-x64lib
+          cp -a .ci-box64/src/box64-0.4.4/x64lib app/src/main/assets/box64-x64lib
+          sha256sum app/src/main/assets/box64-aarch64 | tee app/src/main/assets/box64.sha256
+          test -f app/src/main/assets/box64-x64lib/libstdc++.so.6
+
+      - name: Baixar runtime Linux Android
+        shell: bash
+        run: |
+          chmod +x scripts/fetch_proroot.sh
+          scripts/fetch_proroot.sh
+          mkdir -p app/src/main/assets/licenses
+          curl -fL --retry 3 https://raw.githubusercontent.com/coderredlab/proroot/main/LICENSE -o app/src/main/assets/licenses/proroot-LICENSE.txt
+          unzip -p third_party/box64-0.4.4.zip box64-0.4.4/LICENSE > app/src/main/assets/licenses/box64-LICENSE.txt
+          test -s app/src/main/assets/licenses/proroot-LICENSE.txt
+          test -s app/src/main/assets/licenses/box64-LICENSE.txt
+
+      - name: Verificar Android SDK disponível
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          "$SDKMANAGER" --version
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Configurar Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compilar APK debug
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verificar APK produzido
+        shell: bash
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Enviar APK como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: BubbleBDSHost-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

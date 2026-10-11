@@ -1,0 +1,21 @@
+package com.bubble.bdshost;
+
+import android.content.Context;
+import java.io.File;
+
+public final class AppPaths {
+    private AppPaths() {}
+
+    public static File base(Context c) { return c.getFilesDir(); }
+    public static File downloads(Context c) { return new File(base(c), "downloads"); }
+    public static File rootfs(Context c) { return new File(base(c), "ubuntu"); }
+    public static File bds(Context c) { return new File(rootfs(c), "root/bds"); }
+    public static File logs(Context c) { return new File(base(c), "logs"); }
+    public static File serverLog(Context c) { return new File(logs(c), "bds.log"); }
+    public static File box64(Context c) { return new File(rootfs(c), "usr/local/bin/box64"); }
+
+    public static void ensure(Context c) {
+        downloads(c).mkdirs();
+        logs(c).mkdirs();
+    }
+}
