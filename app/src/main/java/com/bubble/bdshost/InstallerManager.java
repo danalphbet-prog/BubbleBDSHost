@@ -152,6 +152,13 @@ public final class InstallerManager {
         for (String child : children) copyAssetTree(assetPath + "/" + child, new File(dest, child));
     }
 
+    /**
+     * Testa toda a cadeia Linux -> uname -> Box64 em cada modo do proroot.
+     * Só persiste um modo depois que OS TRÊS testes funcionarem.
+     *
+     * Isso corrige a v0.1.1, que parava no primeiro modo onde /bin/sh funcionava
+     * e não tentava --no-static-loader quando o Box64 retornava 139.
+     */
     public RuntimeEngine.Mode diagnoseLinuxRuntime() throws Exception {
         try { Files.deleteIfExists(AppPaths.prorootLog(context).toPath()); } catch (Exception ignored) {}
 
@@ -161,32 +168,52 @@ public final class InstallerManager {
                 RuntimeEngine.Mode.NO_STATIC_NO_LINK
         };
 
-        log("Testando runtime Linux antes do Box64...");
+        log("Testando Linux + Box64 em todos os modos do proroot...");
+
+        StringBuilder failures = new StringBuilder();
 
         for (RuntimeEngine.Mode mode : modes) {
-            log("→ Tentativa proroot: " + mode.id);
-            int rc = runGuest("/root", "printf 'BUBBLE_LINUX_OK\\n'", mode);
+            log("→ Tentativa completa: " + mode.id);
 
-            if (rc == 0) {
-                RuntimeEngine.saveMode(context, mode);
-                log("✓ Linux iniciou com modo: " + mode.id);
-
-                int unameRc = runGuest("/root", "uname -m", mode);
-                if (unameRc != 0) throw new IllegalStateException("Linux iniciou, mas uname falhou. Código " + unameRc);
-
-                int boxRc = runGuest("/root", "box64 --version || box64 -v", mode);
-                if (boxRc != 0) throw new IllegalStateException("Linux funciona, mas Box64 falhou. Código " + boxRc);
-
-                log("✓ Linux ARM64 e Box64 validados separadamente");
-                return mode;
+            int shellRc = runGuest("/root", "printf 'BUBBLE_LINUX_OK\\n'", mode);
+            if (shellRc != 0) {
+                log("⚠ Shell falhou no modo " + mode.id + ". Código " + shellRc);
+                failures.append(mode.id).append(":shell=").append(shellRc).append(' ');
+                continue;
             }
 
-            log("⚠ proroot modo " + mode.id + " retornou código " + rc);
+            log("✓ Shell Linux iniciou no modo: " + mode.id);
+
+            int unameRc = runGuest("/root", "uname -m", mode);
+            if (unameRc != 0) {
+                log("⚠ uname falhou no modo " + mode.id + ". Código " + unameRc);
+                failures.append(mode.id).append(":uname=").append(unameRc).append(' ');
+                continue;
+            }
+
+            int boxRc = runGuest(
+                    "/root",
+                    "export BOX64_NOBANNER=1; /usr/local/bin/box64 --version || /usr/local/bin/box64 -v",
+                    mode
+            );
+
+            if (boxRc != 0) {
+                log("⚠ Box64 falhou no modo " + mode.id + ". Código " + boxRc);
+                log("→ Continuando para o próximo modo do proroot...");
+                failures.append(mode.id).append(":box64=").append(boxRc).append(' ');
+                continue;
+            }
+
+            // Só salva quando Linux + uname + Box64 funcionaram juntos.
+            RuntimeEngine.saveMode(context, mode);
+            log("✓ Linux ARM64 + Box64 funcionam no modo: " + mode.id);
+            return mode;
         }
 
         throw new IllegalStateException(
-                "O proroot falhou nos 3 modos antes do Box64. Consulte: " +
-                AppPaths.prorootLog(context).getAbsolutePath()
+                "Nenhum modo do proroot conseguiu iniciar Linux + Box64. " +
+                "Resultados: " + failures.toString().trim() +
+                ". Consulte: " + AppPaths.prorootLog(context).getAbsolutePath()
         );
     }
 
