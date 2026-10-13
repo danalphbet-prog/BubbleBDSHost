@@ -12,6 +12,8 @@ public final class AppPaths {
     public static File bds(Context c) { return new File(rootfs(c), "root/bds"); }
     public static File logs(Context c) { return new File(base(c), "logs"); }
     public static File serverLog(Context c) { return new File(logs(c), "bds.log"); }
+    public static File prorootLog(Context c) { return new File(logs(c), "proroot.log"); }
+    public static File runtimeMode(Context c) { return new File(base(c), ".bubble-proroot-mode"); }
     public static File box64(Context c) { return new File(rootfs(c), "usr/local/bin/box64"); }
 
     public static void ensure(Context c) {

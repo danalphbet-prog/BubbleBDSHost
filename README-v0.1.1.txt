@@ -1,0 +1,1 @@
+BubbleBDSHost v0.1.1 runtime fix\nSubstitua os arquivos deste pacote no projeto original e faça git push.\nO BdsService não precisa mudar: RuntimeEngine.start() passa a reutilizar o modo proroot salvo.\n
