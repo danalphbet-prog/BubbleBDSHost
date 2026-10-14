@@ -10,8 +10,8 @@ android {
         applicationId 'com.bubble.bdshost'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.1.2'
+        versionCode 4
+        versionName '0.2.0'
 
         ndk {
             abiFilters 'arm64-v8a'
@@ -19,7 +19,9 @@ android {
     }
 
     buildTypes {
-        debug { minifyEnabled false }
+        debug {
+            minifyEnabled false
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -34,7 +36,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            keepDebugSymbols += ['**/libproroot*.so']
+            keepDebugSymbols += ['**/libproot_classic.so', '**/libproot_loader.so']
         }
     }
 }
@@ -42,4 +44,5 @@ android {
 dependencies {
     implementation 'org.apache.commons:commons-compress:1.27.1'
     implementation 'commons-io:commons-io:2.16.1'
+    implementation 'org.tukaani:xz:1.10'
 }

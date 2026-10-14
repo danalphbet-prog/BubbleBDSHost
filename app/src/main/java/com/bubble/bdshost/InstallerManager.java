@@ -3,23 +3,30 @@ package com.bubble.bdshost;
 import android.content.Context;
 import android.os.Build;
 import android.os.StatFs;
-import android.system.Os;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-import java.io.ByteArrayOutputStream;
 import java.util.Locale;
 
 public final class InstallerManager {
-    public static final String UBUNTU_URL = "https://cdimages.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz";
-    public static final String UBUNTU_SHA256 = "a91d5a93010193712d346d761372b7c9db6dfcf093893161c64ca107f05914f2";
-    public static final String BDS_URL = "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.26.52.3.zip";
+    public static final String DEBIAN_URL =
+            "https://github.com/termux/proot-distro/releases/download/v4.29.0/" +
+            "debian-trixie-aarch64-pd-v4.29.0.tar.xz";
+    public static final String DEBIAN_SHA256 =
+            "3834a11cbc6496935760bdc20cca7e2c25724d0cd8f5e4926da8fd5ca1857918";
+
+    public static final String BOX64_TAG = "v0.4.4";
+    public static final String BOX64_COMMIT =
+            "2f130fab1d6e1a4ee8a71dc60cfdfcc839ad192a";
+
+    public static final String BDS_URL =
+            "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/" +
+            "bedrock-server-1.26.52.3.zip";
     public static final String BDS_VERSION = "1.26.52.3";
 
     public interface Callback { void log(String text); }
@@ -33,234 +40,230 @@ public final class InstallerManager {
         AppPaths.ensure(context);
     }
 
-    private void log(String s) { if (cb != null) cb.log(s); }
+    private void log(String s) {
+        if (cb != null) cb.log(s);
+        try {
+            AppPaths.ensure(context);
+            try (FileOutputStream out = new FileOutputStream(AppPaths.installLog(context), true)) {
+                out.write((s + "\n").getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) {}
+    }
 
     public void installAll() throws Exception {
+        log("=== BUBBLE BDS HOST v0.2.0 ===");
+        log("Fluxo: PRoot clássico → Debian Trixie ARM64 → Box64 local → BDS");
         checkArchitecture();
         checkStorage();
         checkRuntime();
-        installLinux();
-        RuntimeEngine.Mode mode = diagnoseLinuxRuntime();
-        prepareLinuxDependencies(mode);
+        installDebian();
+        testDebian();
+        prepareDebianAndBuildBox64();
         installBds();
-        smokeTest(mode);
+        smokeTest();
+        log("✓ Ambiente completo preparado");
     }
 
     public void checkArchitecture() {
         boolean arm64 = false;
-        for (String abi : Build.SUPPORTED_ABIS) if ("arm64-v8a".equalsIgnoreCase(abi)) arm64 = true;
-        if (!arm64) throw new IllegalStateException("Esta versão requer Android ARM64 (arm64-v8a)");
-        log("✓ Arquitetura ARM64 detectada");
+        for (String abi : Build.SUPPORTED_ABIS) {
+            if ("arm64-v8a".equalsIgnoreCase(abi)) arm64 = true;
+        }
+        if (!arm64) {
+            throw new IllegalStateException("Esta versão requer Android ARM64 (arm64-v8a)");
+        }
+        log("[1/8] ✓ Android ARM64 detectado");
     }
 
     public void checkStorage() {
         StatFs sf = new StatFs(context.getFilesDir().getAbsolutePath());
         long free = sf.getAvailableBytes();
-        long min = 1024L * 1024L * 1024L;
-        if (free < min) throw new IllegalStateException("Espaço livre insuficiente. Libere pelo menos 1 GB antes de instalar.");
-        log(String.format(Locale.US, "✓ Espaço livre: %.1f GB", free / 1073741824.0));
+        long min = 1300L * 1024L * 1024L;
+        if (free < min) {
+            throw new IllegalStateException(String.format(Locale.US,
+                    "Espaço livre insuficiente: %.1f GB. Libere pelo menos 1.3 GB.",
+                    free / 1073741824.0));
+        }
+        log(String.format(Locale.US, "[2/8] ✓ Espaço livre: %.1f GB", free / 1073741824.0));
     }
 
     public void checkRuntime() {
         if (!RuntimeEngine.runtimePresent(context)) {
-            throw new IllegalStateException("Runtime proroot ausente. Compile pelo GitHub Actions incluído no projeto.");
+            throw new IllegalStateException(
+                    "PRoot clássico/loader ausente no APK. O GitHub Actions precisa preparar o runtime Termux.");
         }
-        log("✓ Runtime Linux presente no APK");
+        log("[3/8] ✓ PRoot clássico presente no APK");
     }
 
-    public void installLinux() throws Exception {
-        File sh = new File(AppPaths.rootfs(context), "bin/sh");
-        if (sh.exists() && AppPaths.box64(context).exists()) {
-            log("✓ Ubuntu e Box64 já instalados");
+    public void installDebian() throws Exception {
+        File marker = AppPaths.debianMarker(context);
+        File bash = new File(AppPaths.rootfs(context), "bin/bash");
+        if (marker.isFile() && bash.isFile()) {
+            log("[4/8] ✓ Debian Trixie já instalado");
             return;
         }
 
-        File tgz = new File(AppPaths.downloads(context), "ubuntu-base-24.04.5-arm64.tar.gz");
-        if (!tgz.exists() || !UBUNTU_SHA256.equalsIgnoreCase(HashUtils.sha256(tgz))) {
-            log("Baixando Ubuntu Base 24.04.5 ARM64...");
-            DownloadUtils.download(UBUNTU_URL, tgz, (done, total) -> {
-                if (total > 0) log(String.format(Locale.US, "Ubuntu: %.0f%%", (done * 100.0) / total));
+        File legacy = AppPaths.legacyUbuntu(context);
+        if (legacy.exists()) {
+            log("Removendo Ubuntu legado da v0.1.x para liberar espaço...");
+            deleteTree(legacy);
+        }
+        try {
+            Files.deleteIfExists(new File(AppPaths.downloads(context),
+                    "ubuntu-base-24.04.5-arm64.tar.gz").toPath());
+        } catch (Exception ignored) {}
+
+        File archive = new File(AppPaths.downloads(context),
+                "debian-trixie-aarch64-pd-v4.29.0.tar.xz");
+        if (!archive.isFile() || !DEBIAN_SHA256.equalsIgnoreCase(HashUtils.sha256(archive))) {
+            log("Baixando Debian Trixie ARM64 do proot-distro...");
+            DownloadUtils.download(DEBIAN_URL, archive, (done, total) -> {
+                if (total > 0) {
+                    log(String.format(Locale.US, "Debian: %.0f%%", done * 100.0 / total));
+                }
             });
         }
 
-        String hash = HashUtils.sha256(tgz);
-        if (!UBUNTU_SHA256.equalsIgnoreCase(hash)) throw new IllegalStateException("SHA-256 do Ubuntu inválido: " + hash);
-        log("✓ SHA-256 do Ubuntu confirmado");
+        String actual = HashUtils.sha256(archive);
+        if (!DEBIAN_SHA256.equalsIgnoreCase(actual)) {
+            throw new IllegalStateException("SHA-256 do Debian inválido: " + actual);
+        }
+        log("✓ SHA-256 do Debian confirmado");
 
         File root = AppPaths.rootfs(context);
         if (root.exists()) deleteTree(root);
         root.mkdirs();
-        TarRootfsExtractor.extractTarGz(tgz, root, this::log);
-        if (!sh.exists()) throw new IllegalStateException("Rootfs extraído sem /bin/sh");
+
+        // Os rootfs v4.29.0 do proot-distro são empacotados sob um diretório superior.
+        TarRootfsExtractor.extractTarXz(archive, root, 1, this::log);
+        if (!new File(root, "bin/bash").exists()) {
+            throw new IllegalStateException("Debian extraído sem /bin/bash");
+        }
 
         File resolv = new File(root, "etc/resolv.conf");
         try { Files.deleteIfExists(resolv.toPath()); } catch (Exception ignored) {}
         writeText(resolv, "nameserver 1.1.1.1\nnameserver 8.8.8.8\n");
+        writeText(marker, "debian-trixie proot-distro-v4.29.0\n");
 
-        installBox64Asset();
-        log("✓ Ubuntu Base instalado");
+        try { Files.deleteIfExists(archive.toPath()); } catch (Exception ignored) {}
+        log("[4/8] ✓ Debian Trixie ARM64 instalado");
     }
 
-    private void installBox64Asset() throws Exception {
-        File out = AppPaths.box64(context);
-        out.getParentFile().mkdirs();
-
-        try (InputStream in = context.getAssets().open("box64-aarch64")) {
-            Files.copy(in, out.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        } catch (Exception e) {
-            throw new IllegalStateException("Asset Box64 ausente. O GitHub Actions precisa gerar o APK completo.", e);
+    public void testDebian() throws Exception {
+        log("[5/8] Testando PRoot clássico + Debian...");
+        int rc = runGuest("/root",
+                "printf 'BUBBLE_PROOT_OK\\n'; uname -m; " +
+                "grep -E '^(ID|VERSION_CODENAME)=' /etc/os-release");
+        if (rc != 0) {
+            throw new IllegalStateException("PRoot clássico não conseguiu executar Debian. Código " + rc);
         }
-
-        try { Os.chmod(out.getAbsolutePath(), 0755); } catch (Exception ignored) {}
-
-        String expected;
-        try (InputStream in = context.getAssets().open("box64.sha256")) {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] b = new byte[4096];
-            int n;
-            while ((n = in.read(b)) >= 0) if (n > 0) bos.write(b, 0, n);
-            expected = new String(bos.toByteArray(), StandardCharsets.UTF_8).trim().split("\\s+")[0];
-        }
-
-        String actual = HashUtils.sha256(out);
-        if (!expected.equalsIgnoreCase(actual)) throw new IllegalStateException("Box64 corrompido no APK");
-
-        File x64libs = new File(AppPaths.rootfs(context), "usr/lib/box64-x86_64-linux-gnu");
-        copyAssetTree("box64-x64lib", x64libs);
-        log("✓ Box64 + bibliotecas x86_64 instalados e verificados");
+        log("[5/8] ✓ Debian executando através do PRoot clássico");
     }
 
-    private void copyAssetTree(String assetPath, File dest) throws Exception {
-        String[] children = context.getAssets().list(assetPath);
-        if (children == null) throw new IllegalStateException("Asset ausente: " + assetPath);
+    public void prepareDebianAndBuildBox64() throws Exception {
+        File box = AppPaths.box64(context);
+        File marker = AppPaths.box64Marker(context);
 
-        if (children.length == 0) {
-            File parent = dest.getParentFile();
-            if (parent != null) parent.mkdirs();
-            try (InputStream in = context.getAssets().open(assetPath);
-                 FileOutputStream out = new FileOutputStream(dest)) {
-                byte[] buf = new byte[128 * 1024];
-                int n;
-                while ((n = in.read(buf)) >= 0) if (n > 0) out.write(buf, 0, n);
+        if (box.isFile() && marker.isFile()) {
+            int rc = runGuest("/root",
+                    "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v");
+            if (rc == 0) {
+                log("[6/8] ✓ Box64 local já compilado e funcional");
+                return;
             }
-            try { Os.chmod(dest.getAbsolutePath(), 0644); } catch (Exception ignored) {}
-            return;
+            log("Box64 existente falhou; recompilando dentro do Debian...");
+            try { Files.deleteIfExists(marker.toPath()); } catch (Exception ignored) {}
         }
 
-        dest.mkdirs();
-        try { Os.chmod(dest.getAbsolutePath(), 0755); } catch (Exception ignored) {}
-        for (String child : children) copyAssetTree(assetPath + "/" + child, new File(dest, child));
-    }
-
-    /**
-     * Testa toda a cadeia Linux -> uname -> Box64 em cada modo do proroot.
-     * Só persiste um modo depois que OS TRÊS testes funcionarem.
-     *
-     * Isso corrige a v0.1.1, que parava no primeiro modo onde /bin/sh funcionava
-     * e não tentava --no-static-loader quando o Box64 retornava 139.
-     */
-    public RuntimeEngine.Mode diagnoseLinuxRuntime() throws Exception {
-        try { Files.deleteIfExists(AppPaths.prorootLog(context).toPath()); } catch (Exception ignored) {}
-
-        RuntimeEngine.Mode[] modes = {
-                RuntimeEngine.Mode.DEFAULT,
-                RuntimeEngine.Mode.NO_STATIC_LOADER,
-                RuntimeEngine.Mode.NO_STATIC_NO_LINK
-        };
-
-        log("Testando Linux + Box64 em todos os modos do proroot...");
-
-        StringBuilder failures = new StringBuilder();
-
-        for (RuntimeEngine.Mode mode : modes) {
-            log("→ Tentativa completa: " + mode.id);
-
-            int shellRc = runGuest("/root", "printf 'BUBBLE_LINUX_OK\\n'", mode);
-            if (shellRc != 0) {
-                log("⚠ Shell falhou no modo " + mode.id + ". Código " + shellRc);
-                failures.append(mode.id).append(":shell=").append(shellRc).append(' ');
-                continue;
-            }
-
-            log("✓ Shell Linux iniciou no modo: " + mode.id);
-
-            int unameRc = runGuest("/root", "uname -m", mode);
-            if (unameRc != 0) {
-                log("⚠ uname falhou no modo " + mode.id + ". Código " + unameRc);
-                failures.append(mode.id).append(":uname=").append(unameRc).append(' ');
-                continue;
-            }
-
-            int boxRc = runGuest(
-                    "/root",
-                    "export BOX64_NOBANNER=1; /usr/local/bin/box64 --version || /usr/local/bin/box64 -v",
-                    mode
-            );
-
-            if (boxRc != 0) {
-                log("⚠ Box64 falhou no modo " + mode.id + ". Código " + boxRc);
-                log("→ Continuando para o próximo modo do proroot...");
-                failures.append(mode.id).append(":box64=").append(boxRc).append(' ');
-                continue;
-            }
-
-            // Só salva quando Linux + uname + Box64 funcionaram juntos.
-            RuntimeEngine.saveMode(context, mode);
-            log("✓ Linux ARM64 + Box64 funcionam no modo: " + mode.id);
-            return mode;
-        }
-
-        throw new IllegalStateException(
-                "Nenhum modo do proroot conseguiu iniciar Linux + Box64. " +
-                "Resultados: " + failures.toString().trim() +
-                ". Consulte: " + AppPaths.prorootLog(context).getAbsolutePath()
-        );
-    }
-
-    public void prepareLinuxDependencies() throws Exception {
-        prepareLinuxDependencies(RuntimeEngine.savedMode(context));
-    }
-
-    public void prepareLinuxDependencies(RuntimeEngine.Mode mode) throws Exception {
-        File marker = new File(AppPaths.rootfs(context), ".bubble-bds-deps-ready");
-        if (marker.exists()) {
-            log("✓ Dependências Linux já preparadas");
-            return;
-        }
-
-        log("Atualizando índices APT e instalando bibliotecas do BDS...");
-        String cmd =
+        log("[6/8] Instalando toolchain Debian para compilar Box64 no aparelho...");
+        String deps =
                 "export DEBIAN_FRONTEND=noninteractive; " +
                 "apt-get update && " +
-                "apt-get install -y --no-install-recommends ca-certificates curl unzip libcurl4t64 libssl3t64 libstdc++6 libgcc-s1 && " +
-                "apt-get clean";
+                "apt-get install -y --no-install-recommends " +
+                "ca-certificates curl git build-essential cmake python3 unzip libstdc++6 libgcc-s1 && " +
+                "(apt-get install -y --no-install-recommends libcurl4t64 || " +
+                " apt-get install -y --no-install-recommends libcurl4 || true) && " +
+                "(apt-get install -y --no-install-recommends libssl3t64 || " +
+                " apt-get install -y --no-install-recommends libssl3 || true)";
+        int depsRc = runGuest("/root", deps);
+        if (depsRc != 0) {
+            throw new IllegalStateException("Falha ao instalar toolchain/dependências. Código " + depsRc);
+        }
 
-        int rc = runGuest("/root", cmd, mode);
-        if (rc != 0) throw new IllegalStateException("APT/dependências falharam. Código " + rc);
+        log("Clonando Box64 oficial " + BOX64_TAG + " e compilando localmente...");
+        String build =
+                "set -e; " +
+                "rm -rf /root/box64-src; " +
+                "git clone --depth 1 --branch " + BOX64_TAG + " " +
+                "https://github.com/ptitSeb/box64.git /root/box64-src; " +
+                "cd /root/box64-src; " +
+                "test \"$(git rev-parse HEAD)\" = \"" + BOX64_COMMIT + "\"; " +
+                "mkdir -p build; cd build; " +
+                "cmake .. -DARM64=1 -DARM_DYNAREC=ON -DBAD_SIGNAL=ON " +
+                "-DCMAKE_BUILD_TYPE=RelWithDebInfo; " +
+                "make -j2; make install; ldconfig; " +
+                "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v";
+        int buildRc = runGuest("/root", build);
+        if (buildRc != 0) {
+            throw new IllegalStateException("Box64 não compilou/executou dentro do Debian. Código " + buildRc);
+        }
 
-        writeText(marker, "ok\n");
-        log("✓ Dependências Linux prontas");
+        int verifyRc = runGuest("/root",
+                "test -x /usr/local/bin/box64 && " +
+                "(/usr/local/bin/box64 --version || /usr/local/bin/box64 -v)");
+        if (verifyRc != 0) {
+            throw new IllegalStateException("Box64 local não passou na verificação. Código " + verifyRc);
+        }
+
+        writeText(marker, "box64 " + BOX64_TAG + " commit " + BOX64_COMMIT + "\n");
+        runGuest("/root", "rm -rf /root/box64-src; apt-get clean || true");
+        log("[6/8] ✓ Box64 compilado LOCALMENTE dentro do Debian");
     }
 
     public void installBds() throws Exception {
         File server = new File(AppPaths.bds(context), "bedrock_server");
         if (server.exists()) {
-            log("✓ BDS já instalado");
+            log("[7/8] ✓ BDS já instalado");
             return;
         }
 
-        File zip = new File(AppPaths.downloads(context), "bedrock-server-" + BDS_VERSION + ".zip");
-        log("Baixando BDS oficial " + BDS_VERSION + "...");
-
+        File zip = new File(AppPaths.downloads(context),
+                "bedrock-server-" + BDS_VERSION + ".zip");
+        log("[7/8] Baixando BDS oficial " + BDS_VERSION + "...");
         DownloadUtils.download(BDS_URL, zip, (done, total) -> {
-            if (total > 0) log(String.format(Locale.US, "BDS: %.0f%%", (done * 100.0) / total));
+            if (total > 0) {
+                log(String.format(Locale.US, "BDS: %.0f%%", done * 100.0 / total));
+            }
         });
-
         ZipUtils.validateBdsZip(zip);
         log("✓ Estrutura do ZIP do BDS validada");
         ZipUtils.extractBds(zip, AppPaths.bds(context));
         patchServerProperties(new File(AppPaths.bds(context), "server.properties"));
-        log("✓ BDS " + BDS_VERSION + " instalado");
+        log("[7/8] ✓ BDS " + BDS_VERSION + " instalado");
+    }
+
+    public void smokeTest() throws Exception {
+        File server = new File(AppPaths.bds(context), "bedrock_server");
+        if (!server.exists()) throw new IllegalStateException("BDS não instalado");
+
+        int rc = runGuest("/root/bds",
+                "set -e; test -x ./bedrock_server; test -x /usr/local/bin/box64; " +
+                "printf 'BUBBLE_BDS_CHAIN_OK\\n'; " +
+                "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v");
+        if (rc != 0) {
+            throw new IllegalStateException("Smoke test PRoot → Debian → Box64 → BDS falhou. Código " + rc);
+        }
+        log("[8/8] ✓ Cadeia PRoot → Debian → Box64 → BDS validada");
+    }
+
+    private int runGuest(String workdir, String command) throws Exception {
+        Process p = RuntimeEngine.start(context, workdir, command);
+        try (BufferedReader r = new BufferedReader(
+                new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = r.readLine()) != null) log("[debian] " + line);
+        }
+        return p.waitFor();
     }
 
     private void patchServerProperties(File f) throws Exception {
@@ -289,7 +292,6 @@ public final class InstallerManager {
         String[] lines = text.split("\\R", -1);
         boolean found = false;
         StringBuilder out = new StringBuilder();
-
         for (String line : lines) {
             if (line.startsWith(key + "=")) {
                 out.append(key).append('=').append(value).append('\n');
@@ -298,31 +300,8 @@ public final class InstallerManager {
                 out.append(line).append('\n');
             }
         }
-
         if (!found) out.append(key).append('=').append(value).append('\n');
         return out.toString();
-    }
-
-    public void smokeTest() throws Exception {
-        smokeTest(RuntimeEngine.savedMode(context));
-    }
-
-    public void smokeTest(RuntimeEngine.Mode mode) throws Exception {
-        File bds = new File(AppPaths.bds(context), "bedrock_server");
-        if (!bds.exists()) throw new IllegalStateException("BDS não instalado");
-
-        int rc = runGuest("/root/bds", "test -x ./bedrock_server && box64 --version >/dev/null 2>&1", mode);
-        if (rc != 0) throw new IllegalStateException("Smoke test falhou. Código " + rc);
-        log("✓ Smoke test final concluído");
-    }
-
-    private int runGuest(String workdir, String command, RuntimeEngine.Mode mode) throws Exception {
-        Process p = RuntimeEngine.start(context, workdir, command, mode);
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) log("[linux][" + mode.id + "] " + line);
-        }
-        return p.waitFor();
     }
 
     private static void writeText(File f, String text) throws Exception {
@@ -340,7 +319,9 @@ public final class InstallerManager {
             return;
         }
         File[] children = f.listFiles();
-        if (children != null) for (File c : children) deleteTree(c);
+        if (children != null) {
+            for (File c : children) deleteTree(c);
+        }
         Files.deleteIfExists(f.toPath());
     }
 }

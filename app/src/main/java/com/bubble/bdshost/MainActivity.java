@@ -48,7 +48,9 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(18), dp(18), dp(32));
-        scroll.addView(root, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scroll.addView(root, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this);
         title.setText("BUBBLE BDS HOST");
@@ -83,7 +85,8 @@ public class MainActivity extends Activity {
             Intent i = new Intent(this, BdsService.class).setAction(BdsService.ACTION_START);
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
         });
-        stopButton.setOnClickListener(v -> startService(new Intent(this, BdsService.class).setAction(BdsService.ACTION_STOP)));
+        stopButton.setOnClickListener(v ->
+                startService(new Intent(this, BdsService.class).setAction(BdsService.ACTION_STOP)));
 
         TextView ct = new TextView(this);
         ct.setText("Console");
@@ -99,7 +102,8 @@ public class MainActivity extends Activity {
         console.setPadding(dp(10), dp(10), dp(10), dp(10));
         console.setMinHeight(dp(260));
         console.setTextIsSelectable(true);
-        root.addView(console, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)));
+        root.addView(console, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(300)));
 
         LinearLayout cmdRow = new LinearLayout(this);
         cmdRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -113,12 +117,17 @@ public class MainActivity extends Activity {
         cmdRow.addView(send, sendP);
         root.addView(cmdRow, marginParams(0, 8));
         send.setOnClickListener(v -> sendCommand());
-        command.setOnEditorActionListener((v, actionId, event) -> { sendCommand(); return true; });
+        command.setOnEditorActionListener((v, actionId, event) -> {
+            sendCommand();
+            return true;
+        });
 
         TextView note = new TextView(this);
-        note.setText("v0.1 • Ubuntu Base 24.04.5 ARM64 • Box64 0.4.4 • BDS 1.26.52.3\n" +
-                "Runtime Linux: proroot v1.2.8 (incluído sem modificações, conforme licença do projeto).\n" +
-                "O BDS é baixado diretamente de minecraft.net e não é redistribuído dentro deste APK.");
+        note.setText(
+                "v0.2.0 • PRoot clássico • Debian Trixie ARM64 • " +
+                "Box64 0.4.4 compilado localmente • BDS 1.26.52.3\n" +
+                "O Box64 é compilado dentro do Debian no próprio Android.\n" +
+                "O BDS é baixado diretamente de minecraft.net.");
         note.setTextSize(12);
         note.setTextColor(Color.GRAY);
         note.setPadding(0, dp(16), 0, 0);
@@ -162,21 +171,21 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> {
             CharSequence old = console.getText();
             String next = old + (old.length() == 0 ? "" : "\n") + text;
-            if (next.length() > 24000) next = next.substring(next.length() - 24000);
+            if (next.length() > 30000) next = next.substring(next.length() - 30000);
             console.setText(next);
         });
     }
 
     private void refreshStatus() {
         boolean runtime = RuntimeEngine.runtimePresent(this);
-        boolean linux = new File(AppPaths.rootfs(this), "bin/sh").exists();
+        boolean linux = new File(AppPaths.rootfs(this), "bin/bash").exists();
         boolean box64 = AppPaths.box64(this).exists();
         boolean bds = new File(AppPaths.bds(this), "bedrock_server").exists();
         String abi = Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "?";
         status.setText("Arquitetura: " + abi + "\n" +
-                "Runtime Android: " + yes(runtime) + "\n" +
-                "Ubuntu: " + yes(linux) + "\n" +
-                "Box64: " + yes(box64) + "\n" +
+                "PRoot clássico: " + yes(runtime) + "\n" +
+                "Debian Trixie: " + yes(linux) + "\n" +
+                "Box64 local: " + yes(box64) + "\n" +
                 "BDS: " + yes(bds) + "\n" +
                 "Porta padrão: UDP 19132");
         startButton.setEnabled(linux && box64 && bds && runtime);
@@ -194,8 +203,7 @@ public class MainActivity extends Activity {
                         raf.seek(start);
                         raf.readFully(data);
                     }
-                    String text = new String(data, StandardCharsets.UTF_8);
-                    console.setText(text);
+                    console.setText(new String(data, StandardCharsets.UTF_8));
                 }
             } catch (Exception ignored) {}
             handler.postDelayed(this, 1000);
@@ -203,18 +211,27 @@ public class MainActivity extends Activity {
     };
 
     private void requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 100);
         }
     }
 
     private String yes(boolean x) { return x ? "✓ PRONTO" : "— NÃO INSTALADO"; }
     private Button button(String text) { Button b = new Button(this); b.setText(text); return b; }
-    private LinearLayout.LayoutParams matchWrap() { return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); }
-    private LinearLayout.LayoutParams marginParams(int horizontal, int top) {
-        LinearLayout.LayoutParams p = matchWrap(); p.setMargins(dp(horizontal), dp(top), dp(horizontal), 0); return p;
+    private LinearLayout.LayoutParams matchWrap() {
+        return new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
     }
-    private int dp(int x) { return (int)(x * getResources().getDisplayMetrics().density + 0.5f); }
+    private LinearLayout.LayoutParams marginParams(int horizontal, int top) {
+        LinearLayout.LayoutParams p = matchWrap();
+        p.setMargins(dp(horizontal), dp(top), dp(horizontal), 0);
+        return p;
+    }
+    private int dp(int x) {
+        return (int)(x * getResources().getDisplayMetrics().density + 0.5f);
+    }
 
     @Override protected void onDestroy() {
         handler.removeCallbacks(logUpdater);
