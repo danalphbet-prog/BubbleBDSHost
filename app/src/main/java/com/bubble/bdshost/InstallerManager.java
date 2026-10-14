@@ -29,7 +29,10 @@ public final class InstallerManager {
             "bedrock-server-1.26.52.3.zip";
     public static final String BDS_VERSION = "1.26.52.3";
 
-    public interface Callback { void log(String text); }
+    public interface Callback {
+        void log(String text);
+        default void progress(int percent, String stage) {}
+    }
 
     private final Context context;
     private final Callback cb;
@@ -50,17 +53,32 @@ public final class InstallerManager {
         } catch (Exception ignored) {}
     }
 
+    private void progress(int percent, String stage) {
+        if (cb != null) cb.progress(Math.max(0, Math.min(100, percent)), stage);
+    }
+
     public void installAll() throws Exception {
-        log("=== BUBBLE BDS HOST v0.2.0 ===");
+        log("=== BUBBLE BDS HOST v0.2.1 ===");
         log("Fluxo: PRoot clássico → Debian Trixie ARM64 → Box64 local → BDS");
+        progress(1, "Verificando Android");
         checkArchitecture();
+        progress(5, "Verificando armazenamento");
         checkStorage();
+        progress(10, "Verificando PRoot");
         checkRuntime();
+        progress(15, "Preparando Debian Trixie");
         installDebian();
+        progress(35, "Testando Debian");
         testDebian();
+        progress(42, "Reparando dpkg/apt");
+        repairDebianPackages();
+        progress(50, "Preparando e compilando Box64");
         prepareDebianAndBuildBox64();
+        progress(78, "Instalando BDS");
         installBds();
+        progress(94, "Validando cadeia completa");
         smokeTest();
+        progress(100, "Ambiente pronto");
         log("✓ Ambiente completo preparado");
     }
 
@@ -100,6 +118,7 @@ public final class InstallerManager {
         File bash = new File(AppPaths.rootfs(context), "bin/bash");
         if (marker.isFile() && bash.isFile()) {
             log("[4/8] ✓ Debian Trixie já instalado");
+            progress(35, "Debian Trixie já instalado");
             return;
         }
 
@@ -119,7 +138,9 @@ public final class InstallerManager {
             log("Baixando Debian Trixie ARM64 do proot-distro...");
             DownloadUtils.download(DEBIAN_URL, archive, (done, total) -> {
                 if (total > 0) {
-                    log(String.format(Locale.US, "Debian: %.0f%%", done * 100.0 / total));
+                    double fraction = done * 1.0 / total;
+                    progress(15 + (int)Math.round(fraction * 15.0), "Baixando Debian Trixie");
+                    log(String.format(Locale.US, "Debian: %.0f%%", fraction * 100.0));
                 }
             });
         }
@@ -133,8 +154,8 @@ public final class InstallerManager {
         File root = AppPaths.rootfs(context);
         if (root.exists()) deleteTree(root);
         root.mkdirs();
+        progress(31, "Extraindo Debian Trixie");
 
-        // Os rootfs v4.29.0 do proot-distro são empacotados sob um diretório superior.
         TarRootfsExtractor.extractTarXz(archive, root, 1, this::log);
         if (!new File(root, "bin/bash").exists()) {
             throw new IllegalStateException("Debian extraído sem /bin/bash");
@@ -160,6 +181,34 @@ public final class InstallerManager {
         log("[5/8] ✓ Debian executando através do PRoot clássico");
     }
 
+    private void repairDebianPackages() throws Exception {
+        log("Verificando consistência do dpkg/apt antes de continuar...");
+        int configureRc = runGuest("/root",
+                "export DEBIAN_FRONTEND=noninteractive; dpkg --configure -a");
+        if (configureRc != 0) {
+            log("dpkg encontrou instalação interrompida. Tentando reparo automático...");
+            int updateRc = runGuest("/root",
+                    "export DEBIAN_FRONTEND=noninteractive; apt-get update");
+            if (updateRc != 0) {
+                log("Aviso: apt-get update durante o reparo retornou código " +
+                        updateRc + ". Continuando com o índice existente.");
+            }
+            int fixRc = runGuest("/root",
+                    "export DEBIAN_FRONTEND=noninteractive; apt-get -f install -y");
+            if (fixRc != 0) {
+                throw new IllegalStateException(
+                        "Reparo apt-get -f install falhou. Código " + fixRc);
+            }
+            configureRc = runGuest("/root",
+                    "export DEBIAN_FRONTEND=noninteractive; dpkg --configure -a");
+            if (configureRc != 0) {
+                throw new IllegalStateException(
+                        "dpkg continuou inconsistente após reparo. Código " + configureRc);
+            }
+        }
+        log("✓ dpkg/apt consistente; instalação pode ser retomada");
+    }
+
     public void prepareDebianAndBuildBox64() throws Exception {
         File box = AppPaths.box64(context);
         File marker = AppPaths.box64Marker(context);
@@ -169,6 +218,7 @@ public final class InstallerManager {
                     "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v");
             if (rc == 0) {
                 log("[6/8] ✓ Box64 local já compilado e funcional");
+                progress(78, "Box64 já preparado");
                 return;
             }
             log("Box64 existente falhou; recompilando dentro do Debian...");
@@ -176,9 +226,16 @@ public final class InstallerManager {
         }
 
         log("[6/8] Instalando toolchain Debian para compilar Box64 no aparelho...");
+        progress(52, "Atualizando pacotes Debian");
+        int updateRc = runGuest("/root",
+                "export DEBIAN_FRONTEND=noninteractive; apt-get update");
+        if (updateRc != 0) {
+            throw new IllegalStateException("Falha no apt-get update. Código " + updateRc);
+        }
+
+        progress(56, "Instalando toolchain do Box64");
         String deps =
                 "export DEBIAN_FRONTEND=noninteractive; " +
-                "apt-get update && " +
                 "apt-get install -y --no-install-recommends " +
                 "ca-certificates curl git build-essential cmake python3 unzip libstdc++6 libgcc-s1 && " +
                 "(apt-get install -y --no-install-recommends libcurl4t64 || " +
@@ -187,10 +244,18 @@ public final class InstallerManager {
                 " apt-get install -y --no-install-recommends libssl3 || true)";
         int depsRc = runGuest("/root", deps);
         if (depsRc != 0) {
-            throw new IllegalStateException("Falha ao instalar toolchain/dependências. Código " + depsRc);
+            log("Toolchain retornou código " + depsRc +
+                    ". Executando um reparo e tentando uma única vez novamente...");
+            repairDebianPackages();
+            depsRc = runGuest("/root", deps);
+        }
+        if (depsRc != 0) {
+            throw new IllegalStateException(
+                    "Falha ao instalar toolchain/dependências após reparo. Código " + depsRc);
         }
 
         log("Clonando Box64 oficial " + BOX64_TAG + " e compilando localmente...");
+        progress(64, "Compilando Box64 no Android");
         String build =
                 "set -e; " +
                 "rm -rf /root/box64-src; " +
@@ -205,9 +270,11 @@ public final class InstallerManager {
                 "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v";
         int buildRc = runGuest("/root", build);
         if (buildRc != 0) {
-            throw new IllegalStateException("Box64 não compilou/executou dentro do Debian. Código " + buildRc);
+            throw new IllegalStateException(
+                    "Box64 não compilou/executou dentro do Debian. Código " + buildRc);
         }
 
+        progress(74, "Verificando Box64");
         int verifyRc = runGuest("/root",
                 "test -x /usr/local/bin/box64 && " +
                 "(/usr/local/bin/box64 --version || /usr/local/bin/box64 -v)");
@@ -224,6 +291,7 @@ public final class InstallerManager {
         File server = new File(AppPaths.bds(context), "bedrock_server");
         if (server.exists()) {
             log("[7/8] ✓ BDS já instalado");
+            progress(94, "BDS já instalado");
             return;
         }
 
@@ -232,11 +300,15 @@ public final class InstallerManager {
         log("[7/8] Baixando BDS oficial " + BDS_VERSION + "...");
         DownloadUtils.download(BDS_URL, zip, (done, total) -> {
             if (total > 0) {
-                log(String.format(Locale.US, "BDS: %.0f%%", done * 100.0 / total));
+                double fraction = done * 1.0 / total;
+                progress(78 + (int)Math.round(fraction * 12.0),
+                        "Baixando BDS " + BDS_VERSION);
+                log(String.format(Locale.US, "BDS: %.0f%%", fraction * 100.0));
             }
         });
         ZipUtils.validateBdsZip(zip);
         log("✓ Estrutura do ZIP do BDS validada");
+        progress(91, "Extraindo BDS");
         ZipUtils.extractBds(zip, AppPaths.bds(context));
         patchServerProperties(new File(AppPaths.bds(context), "server.properties"));
         log("[7/8] ✓ BDS " + BDS_VERSION + " instalado");
@@ -251,7 +323,8 @@ public final class InstallerManager {
                 "printf 'BUBBLE_BDS_CHAIN_OK\\n'; " +
                 "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v");
         if (rc != 0) {
-            throw new IllegalStateException("Smoke test PRoot → Debian → Box64 → BDS falhou. Código " + rc);
+            throw new IllegalStateException(
+                    "Smoke test PRoot → Debian → Box64 → BDS falhou. Código " + rc);
         }
         log("[8/8] ✓ Cadeia PRoot → Debian → Box64 → BDS validada");
     }

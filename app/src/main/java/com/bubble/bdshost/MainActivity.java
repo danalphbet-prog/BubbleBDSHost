@@ -13,6 +13,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -25,13 +26,16 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private TextView status;
     private TextView console;
+    private TextView progressText;
+    private ProgressBar installProgress;
     private Button installButton;
     private Button startButton;
     private Button stopButton;
     private EditText command;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile boolean installerBusy;
-    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final android.os.Handler handler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -67,8 +71,22 @@ public class MainActivity extends Activity {
         status.setBackgroundColor(0xffeeeeee);
         root.addView(status, matchWrap());
 
+        progressText = new TextView(this);
+        progressText.setText("Pronto para preparar o ambiente");
+        progressText.setTextSize(13);
+        progressText.setTextColor(Color.DKGRAY);
+        progressText.setPadding(dp(2), dp(14), dp(2), dp(4));
+        root.addView(progressText, matchWrap());
+
+        installProgress = new ProgressBar(
+                this, null, android.R.attr.progressBarStyleHorizontal);
+        installProgress.setMax(100);
+        installProgress.setProgress(0);
+        root.addView(installProgress, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(14)));
+
         installButton = button("INSTALAR / PREPARAR TUDO");
-        root.addView(installButton, marginParams(0, 14));
+        root.addView(installButton, marginParams(0, 10));
         installButton.setOnClickListener(v -> installAll());
 
         LinearLayout row = new LinearLayout(this);
@@ -124,8 +142,9 @@ public class MainActivity extends Activity {
 
         TextView note = new TextView(this);
         note.setText(
-                "v0.2.0 • PRoot clássico • Debian Trixie ARM64 • " +
+                "v0.2.1 • PRoot clássico • Debian Trixie ARM64 • " +
                 "Box64 0.4.4 compilado localmente • BDS 1.26.52.3\n" +
+                "Retomada automática após interrupções do dpkg/apt.\n" +
                 "O Box64 é compilado dentro do Debian no próprio Android.\n" +
                 "O BDS é baixado diretamente de minecraft.net.");
         note.setTextSize(12);
@@ -140,18 +159,38 @@ public class MainActivity extends Activity {
         if (installerBusy) return;
         installerBusy = true;
         installButton.setEnabled(false);
+        installButton.setText("PREPARANDO...");
+        installProgress.setProgress(0);
+        progressText.setText("Iniciando...");
         console.setText("");
+
         executor.submit(() -> {
             try {
-                InstallerManager im = new InstallerManager(this, this::appendConsole);
+                InstallerManager.Callback callback = new InstallerManager.Callback() {
+                    @Override public void log(String text) {
+                        appendConsole(text);
+                    }
+
+                    @Override public void progress(int percent, String stage) {
+                        runOnUiThread(() -> {
+                            installProgress.setProgress(percent);
+                            progressText.setText(stage + " • " + percent + "%");
+                        });
+                    }
+                };
+
+                InstallerManager im = new InstallerManager(this, callback);
                 im.installAll();
                 appendConsole("\n=== AMBIENTE PRONTO ===");
             } catch (Throwable e) {
                 appendConsole("\nERRO: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                runOnUiThread(() -> progressText.setText(
+                        "Interrompido — toque em INSTALAR / PREPARAR TUDO para retomar"));
             } finally {
                 installerBusy = false;
                 runOnUiThread(() -> {
                     installButton.setEnabled(true);
+                    installButton.setText("INSTALAR / PREPARAR TUDO");
                     refreshStatus();
                 });
             }
@@ -212,13 +251,18 @@ public class MainActivity extends Activity {
 
     private void requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 100);
         }
     }
 
     private String yes(boolean x) { return x ? "✓ PRONTO" : "— NÃO INSTALADO"; }
-    private Button button(String text) { Button b = new Button(this); b.setText(text); return b; }
+    private Button button(String text) {
+        Button b = new Button(this);
+        b.setText(text);
+        return b;
+    }
     private LinearLayout.LayoutParams matchWrap() {
         return new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
