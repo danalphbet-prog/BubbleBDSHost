@@ -11,3 +11,5 @@ app/src/main/assets/licenses/
 keystore.properties
 *.p12
 *.jks
+.bubble-backup*/
+.bubble-backups/

@@ -32,7 +32,8 @@
             android:name=".MainActivity"
             android:exported="false"
             android:screenOrientation="unspecified"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".InstallService"
