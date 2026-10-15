@@ -58,7 +58,7 @@ public final class InstallerManager {
     }
 
     public void installAll() throws Exception {
-        log("=== BUBBLE BDS HOST v0.2.1 ===");
+        log("=== BUBBLE BDS HOST v0.3.1 ===");
         log("Fluxo: PRoot clássico → Debian Trixie ARM64 → Box64 local → BDS");
         progress(1, "Verificando Android");
         checkArchitecture();
@@ -254,24 +254,80 @@ public final class InstallerManager {
                     "Falha ao instalar toolchain/dependências após reparo. Código " + depsRc);
         }
 
-        log("Clonando Box64 oficial " + BOX64_TAG + " e compilando localmente...");
-        progress(64, "Compilando Box64 no Android");
-        String build =
+        File box64Source = new File(AppPaths.rootfs(context), "root/box64-src");
+        File box64Build = new File(box64Source, "build");
+        File box64CmakeCache = new File(box64Build, "CMakeCache.txt");
+
+        boolean sourcePresent = new File(box64Source, ".git").isDirectory()
+                && new File(box64Source, "CMakeLists.txt").isFile();
+        boolean buildPresent = box64Build.isDirectory();
+
+        if (sourcePresent && buildPresent) {
+            log("Encontrado build parcial do Box64.");
+            log("Retomando compilação a partir dos objetos já concluídos...");
+            progress(64, "Retomando compilação do Box64");
+        } else if (sourcePresent) {
+            log("Código-fonte do Box64 já existe; preparando diretório de build...");
+            progress(64, "Preparando build do Box64");
+        } else {
+            log("Baixando código-fonte oficial do Box64 " + BOX64_TAG + "...");
+            progress(60, "Obtendo código-fonte do Box64");
+        }
+
+        String prepareSource =
                 "set -e; " +
-                "rm -rf /root/box64-src; " +
-                "git clone --depth 1 --branch " + BOX64_TAG + " " +
-                "https://github.com/ptitSeb/box64.git /root/box64-src; " +
+                "if [ -d /root/box64-src/.git ] && [ -f /root/box64-src/CMakeLists.txt ]; then " +
+                "  cd /root/box64-src; " +
+                "  HEAD=$(git rev-parse HEAD 2>/dev/null || true); " +
+                "  if [ \"$HEAD\" != \"" + BOX64_COMMIT + "\" ]; then " +
+                "    echo BUBBLE_BOX64_SOURCE_INVALID; " +
+                "    cd /root; rm -rf /root/box64-src; " +
+                "  else echo BUBBLE_BOX64_SOURCE_RESUME_OK; fi; " +
+                "fi; " +
+                "if [ ! -d /root/box64-src/.git ]; then " +
+                "  git clone --depth 1 --branch " + BOX64_TAG + " " +
+                "  https://github.com/ptitSeb/box64.git /root/box64-src; " +
+                "fi; " +
                 "cd /root/box64-src; " +
                 "test \"$(git rev-parse HEAD)\" = \"" + BOX64_COMMIT + "\"; " +
+                "test -f CMakeLists.txt";
+
+        int sourceRc = runGuest("/root", prepareSource);
+        if (sourceRc != 0) {
+            throw new IllegalStateException(
+                    "Não foi possível preparar o código-fonte do Box64. Código " + sourceRc);
+        }
+
+        if (box64CmakeCache.isFile()) {
+            log("✓ Cache CMake encontrado; mantendo arquivos já compilados");
+        } else {
+            log("Configurando CMake do Box64...");
+        }
+
+        progress(66, buildPresent
+                ? "Continuando make -j2 do Box64"
+                : "Compilando Box64 no Android");
+
+        String build =
+                "set -e; " +
+                "cd /root/box64-src; " +
                 "mkdir -p build; cd build; " +
                 "cmake .. -DARM64=1 -DARM_DYNAREC=ON -DBAD_SIGNAL=ON " +
                 "-DCMAKE_BUILD_TYPE=RelWithDebInfo; " +
-                "make -j2; make install; ldconfig; " +
+                "echo BUBBLE_BOX64_MAKE_RESUME; " +
+                "make -j2; " +
+                "echo BUBBLE_BOX64_MAKE_COMPLETE; " +
+                "make install; ldconfig; " +
                 "/usr/local/bin/box64 --version || /usr/local/bin/box64 -v";
+
         int buildRc = runGuest("/root", build);
         if (buildRc != 0) {
+            log("Compilação do Box64 foi interrompida ou falhou.");
+            log("Os objetos já concluídos foram preservados em /root/box64-src/build.");
+            log("Toque em Instalar Tudo novamente para continuar do ponto salvo.");
             throw new IllegalStateException(
-                    "Box64 não compilou/executou dentro do Debian. Código " + buildRc);
+                    "Box64 não concluiu a compilação. Código " + buildRc +
+                    ". O build parcial foi preservado para retomada.");
         }
 
         progress(74, "Verificando Box64");
@@ -283,7 +339,8 @@ public final class InstallerManager {
         }
 
         writeText(marker, "box64 " + BOX64_TAG + " commit " + BOX64_COMMIT + "\n");
-        runGuest("/root", "rm -rf /root/box64-src; apt-get clean || true");
+        runGuest("/root", "apt-get clean || true");
+        log("✓ Cache de compilação do Box64 preservado para futuras retomadas");
         log("[6/8] ✓ Box64 compilado LOCALMENTE dentro do Debian");
     }
 
