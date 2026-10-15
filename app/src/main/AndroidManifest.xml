@@ -31,7 +31,18 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <service
+            android:name=".InstallService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Installs local Debian, Box64 and Minecraft Bedrock server runtime" />
+        </service>
 
         <service
             android:name=".BdsService"

@@ -8,3 +8,6 @@ app/src/main/assets/box64-aarch64
 app/src/main/assets/box64.sha256
 app/src/main/assets/box64-x64lib/
 app/src/main/assets/licenses/
+keystore.properties
+*.p12
+*.jks

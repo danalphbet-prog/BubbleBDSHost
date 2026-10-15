@@ -7,7 +7,7 @@ on:
 
 jobs:
   apk:
-    name: Compilar APK v0.2
+    name: Compilar APK assinado
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -38,33 +38,53 @@ jobs:
           test -s app/src/main/jniLibs/arm64-v8a/libproot_loader.so
           test -s app/src/main/jniLibs/arm64-v8a/libandroid-shmem.so
           test -s app/src/main/jniLibs/arm64-v8a/libtalloc.so
-          file app/src/main/jniLibs/arm64-v8a/libproot_classic.so
-          file app/src/main/jniLibs/arm64-v8a/libproot_loader.so
-          readelf -d app/src/main/jniLibs/arm64-v8a/libproot_classic.so | grep NEEDED || true
 
-      - name: Verificar Android SDK disponível
+      - name: Verificar Android SDK
         shell: bash
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
-          "$SDKMANAGER" --version
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Configurar assinatura persistente
+        shell: bash
+        env:
+          BUBBLE_KEYSTORE_B64: ${{ secrets.BUBBLE_KEYSTORE_B64 }}
+          BUBBLE_KEYSTORE_PASSWORD: ${{ secrets.BUBBLE_KEYSTORE_PASSWORD }}
+          BUBBLE_KEY_ALIAS: ${{ secrets.BUBBLE_KEY_ALIAS }}
+          BUBBLE_KEY_PASSWORD: ${{ secrets.BUBBLE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "${BUBBLE_KEYSTORE_B64:-}" || { echo "ERRO: BUBBLE_KEYSTORE_B64 não configurado"; exit 1; }
+          test -n "${BUBBLE_KEYSTORE_PASSWORD:-}" || exit 1
+          test -n "${BUBBLE_KEY_ALIAS:-}" || exit 1
+          test -n "${BUBBLE_KEY_PASSWORD:-}" || exit 1
+
+          printf '%s' "$BUBBLE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bubble-signing.p12"
+
+          cat > keystore.properties <<KEYEOF
+          storeFile=$RUNNER_TEMP/bubble-signing.p12
+          storePassword=$BUBBLE_KEYSTORE_PASSWORD
+          keyAlias=$BUBBLE_KEY_ALIAS
+          keyPassword=$BUBBLE_KEY_PASSWORD
+          storeType=PKCS12
+          KEYEOF
 
       - name: Configurar Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Compilar APK debug
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Compilar APK release assinado
+        run: gradle :app:assembleRelease --stacktrace
 
-      - name: Verificar APK produzido
+      - name: Verificar APK
         shell: bash
         run: |
           set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
+          APK=app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           ls -lh "$APK"
           unzip -l "$APK" | grep -E 'libproot_classic|libproot_loader|libandroid-shmem|libtalloc'
@@ -73,5 +93,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BubbleBDSHost-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
