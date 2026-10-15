@@ -142,23 +142,23 @@ public class MainActivity extends Activity {
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.bubble_app_icon);
-        logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        row.addView(logo, new LinearLayout.LayoutParams(dp(78), dp(78)));
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        row.addView(logo, new LinearLayout.LayoutParams(dp(62), dp(62)));
 
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.setPadding(dp(12), 0, 0, 0);
-        words.addView(tv("BUBBLE", 31, WHITE, Typeface.BOLD));
-        words.addView(tv("B D S   H O S T", 16, WHITE, Typeface.NORMAL));
+        words.addView(tv("BUBBLE", 25, WHITE, Typeface.BOLD));
+        words.addView(tv("B D S   H O S T", 13, WHITE, Typeface.NORMAL));
         words.addView(tv("Minecraft Bedrock Dedicated Server Host",
-                11, Color.argb(215,255,235,238), Typeface.NORMAL));
+                9.5f, Color.argb(215,255,235,238), Typeface.NORMAL));
         row.addView(words, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         return row;
     }
 
     private TextView smallButton(String glyph) {
-        TextView b = tv(glyph, 23, WHITE, Typeface.BOLD);
+        TextView b = tv(glyph, 19, WHITE, Typeface.BOLD);
         b.setGravity(Gravity.CENTER);
         b.setBackground(box(Color.argb(48,255,255,255),
                 Color.argb(55,255,255,255), 13));
@@ -168,9 +168,9 @@ public class MainActivity extends Activity {
     }
 
     private TextView mainButton(String label) {
-        TextView b = tv(label, 21, WHITE, Typeface.BOLD);
+        TextView b = tv(label, 18, WHITE, Typeface.BOLD);
         b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(16), dp(18), dp(16), dp(18));
+        b.setPadding(dp(16), dp(15), dp(16), dp(15));
         b.setBackground(gradient(new int[]{
                 Color.rgb(255,54,76), Color.rgb(255,20,43),
                 Color.rgb(237,18,48)}, 36));
@@ -197,7 +197,7 @@ public class MainActivity extends Activity {
         loading.addView(spinner, new LinearLayout.LayoutParams(dp(30), dp(30)));
 
         stageText = tv("Pronto para preparar o ambiente",
-                14, Color.argb(230,255,239,242), Typeface.NORMAL);
+                12, Color.argb(230,255,239,242), Typeface.NORMAL);
         stageText.setPadding(dp(10),0,0,0);
         loading.addView(stageText);
         root.addView(loading, match(0,0,0,8));
@@ -232,9 +232,9 @@ public class MainActivity extends Activity {
         title.setOrientation(LinearLayout.VERTICAL);
         title.setPadding(dp(12),0,0,0);
         title.addView(tv(installation ? "Console de Instalação" : "Console do Servidor",
-                18, WHITE, Typeface.BOLD));
+                15, WHITE, Typeface.BOLD));
         title.addView(tv(installation ? "Logs da preparação do ambiente" : "Logs em tempo real",
-                12, MUTED, Typeface.NORMAL));
+                10, MUTED, Typeface.NORMAL));
         head.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
@@ -254,7 +254,7 @@ public class MainActivity extends Activity {
         consoleScroll.setFillViewport(true);
         consoleScroll.setBackground(box(TERMINAL, Color.rgb(45,40,43), 14));
 
-        consoleText = tv("", 11.5f, Color.rgb(235,231,233), Typeface.NORMAL);
+        consoleText = tv("", 10, Color.rgb(235,231,233), Typeface.NORMAL);
         consoleText.setTypeface(Typeface.MONOSPACE);
         consoleText.setTextIsSelectable(true);
         consoleText.setPadding(dp(12),dp(12),dp(12),dp(12));
@@ -294,7 +294,7 @@ public class MainActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(tv("Console",22,WHITE,Typeface.BOLD),
+        top.addView(tv("Console",18,WHITE,Typeface.BOLD),
                 new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         TextView close = smallButton("×");
         top.addView(close,new LinearLayout.LayoutParams(dp(54),dp(54)));
@@ -302,7 +302,7 @@ public class MainActivity extends Activity {
 
         fullConsoleScroll = new ScrollView(this);
         fullConsoleScroll.setBackground(box(TERMINAL, Color.rgb(45,40,43),18));
-        fullConsoleText = tv("",12,Color.rgb(235,231,233),Typeface.NORMAL);
+        fullConsoleText = tv("",10.5f,Color.rgb(235,231,233),Typeface.NORMAL);
         fullConsoleText.setTypeface(Typeface.MONOSPACE);
         fullConsoleText.setPadding(dp(14),dp(14),dp(14),dp(14));
         fullConsoleText.setTextIsSelectable(true);
@@ -345,21 +345,21 @@ public class MainActivity extends Activity {
         row.setBackground(box(Color.argb(42,255,255,255),
                 Color.argb(65,255,255,255),22));
 
-        row.addView(tv("●",26,Color.rgb(72,244,151),Typeface.BOLD));
+        row.addView(tv("●",22,Color.rgb(72,244,151),Typeface.BOLD));
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
         left.setPadding(dp(10),0,0,0);
-        left.addView(tv("Servidor Pronto",20,WHITE,Typeface.BOLD));
-        left.addView(tv("BDS preparado no aparelho",12,
+        left.addView(tv("Servidor Pronto",17,WHITE,Typeface.BOLD));
+        left.addView(tv("BDS preparado no aparelho",10,
                 Color.argb(225,255,236,239),Typeface.NORMAL));
         row.addView(left,new LinearLayout.LayoutParams(
                 0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
 
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.VERTICAL);
-        TextView port = tv("19132",18,WHITE,Typeface.BOLD);
+        TextView port = tv("19132",15,WHITE,Typeface.BOLD);
         port.setGravity(Gravity.END);
-        TextView label = tv("Porta UDP",11,
+        TextView label = tv("Porta UDP",9.5f,
                 Color.argb(220,255,236,239),Typeface.NORMAL);
         label.setGravity(Gravity.END);
         right.addView(port);
@@ -374,9 +374,9 @@ public class MainActivity extends Activity {
         card.setPadding(dp(18),dp(18),dp(18),dp(18));
         card.setBackground(box(CARD,Color.argb(78,255,88,108),24));
 
-        card.addView(tv("◈   Configurações do Mundo",23,WHITE,Typeface.BOLD));
+        card.addView(tv("◈   Configurações do Mundo",19,WHITE,Typeface.BOLD));
         TextView sub = tv("Edite as opções do seu mundo Minecraft",
-                13,MUTED,Typeface.NORMAL);
+                11,MUTED,Typeface.NORMAL);
         sub.setPadding(0,dp(2),0,dp(16));
         card.addView(sub);
 
@@ -400,9 +400,9 @@ public class MainActivity extends Activity {
         cheatRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(tv("Cheats",16,MUTED,Typeface.BOLD));
+        words.addView(tv("Cheats",14,MUTED,Typeface.BOLD));
         words.addView(tv("Permite o uso de comandos no servidor",
-                12,MUTED,Typeface.NORMAL));
+                10,MUTED,Typeface.NORMAL));
         cheatRow.addView(words,new LinearLayout.LayoutParams(
                 0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         cheats = new Switch(this);
@@ -420,7 +420,7 @@ public class MainActivity extends Activity {
         seed.setInputType(InputType.TYPE_CLASS_TEXT);
         card.addView(seed, match(0,6,0,4));
         card.addView(tv("Deixe em branco para gerar um mundo aleatório",
-                11,MUTED,Typeface.NORMAL), match(0,0,0,16));
+                9.5f,MUTED,Typeface.NORMAL), match(0,0,0,16));
 
         primaryButton = mainButton("▶    Iniciar Servidor    ›");
         primaryButton.setOnClickListener(v -> startServer());
@@ -429,7 +429,7 @@ public class MainActivity extends Activity {
     }
 
     private TextView label(String s) {
-        return tv(s,15,MUTED,Typeface.BOLD);
+        return tv(s,13,MUTED,Typeface.BOLD);
     }
 
     private EditText field(String hint) {
@@ -438,14 +438,14 @@ public class MainActivity extends Activity {
         e.setTextColor(WHITE);
         e.setHintTextColor(Color.rgb(150,138,143));
         e.setHint(hint);
-        e.setTextSize(16);
+        e.setTextSize(14);
         e.setPadding(dp(14),0,dp(14),0);
         e.setBackground(box(Color.rgb(39,24,27),Color.rgb(111,90,96),14));
         return e;
     }
 
     private TextView segment(String s, boolean active) {
-        TextView b = tv(s,16,active?WHITE:MUTED,Typeface.BOLD);
+        TextView b = tv(s,14,active?WHITE:MUTED,Typeface.BOLD);
         b.setGravity(Gravity.CENTER);
         b.setClickable(true);
         b.setBackground(box(active?Color.rgb(175,22,43):Color.rgb(45,28,32),
