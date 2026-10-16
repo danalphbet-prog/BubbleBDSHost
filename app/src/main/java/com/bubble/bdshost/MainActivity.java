@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -36,11 +37,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    public static final String EXTRA_OPEN_TAB = "bubble_open_tab";
+
     private static final int RED = Color.rgb(255, 20, 43);
     private static final int WHITE = Color.WHITE;
     private static final int CARD = Color.rgb(46, 14, 18);
     private static final int TERMINAL = Color.rgb(14, 13, 15);
     private static final int MUTED = Color.rgb(210, 198, 202);
+
+    private Typeface minecraftRegular;
+    private Typeface minecraftBold;
 
     private static final int TAB_HOME = 0;
     private static final int TAB_CONSOLE = 1;
@@ -48,27 +54,49 @@ public class MainActivity extends Activity {
     private final android.os.Handler handler =
             new android.os.Handler(android.os.Looper.getMainLooper());
 
+    // Installer
     private ProgressBar generalProgress, stageProgress;
     private TextView generalLabel, stageLabel, installButton, versionSelector, installError;
     private LinearLayout versionOptions;
     private String selectedChannel = InstallerManager.CHANNEL_STABLE;
 
-    private EditText worldName, seed, commandInput;
-    private Switch cheats;
+    // World / server form
+    private EditText worldName, seed, serverName, maxPlayers, serverPort, idleTimeout;
+    private EditText viewDistance, tickDistance, maxThreads;
+    private Switch cheats, forceGamemode, allowList, onlineMode;
+    private Switch resourcePackRequired, clientChunkGeneration;
     private TextView survival, creative, serverButton;
+    private TextView[] difficultyButtons = new TextView[4];
+    private TextView[] permissionButtons = new TextView[3];
     private boolean creativeMode;
+    private String difficultyValue = "normal";
+    private String permissionValue = "member";
 
+    private LinearLayout configurationArea;
+    private TextView configLockNotice;
+
+    // Server summary
     private TextView infoState, infoVersion, infoWorld, infoMode, infoAddress, infoAddons;
+
+    // Console
+    private EditText commandInput;
     private TextView consoleText;
     private ScrollView consoleScroll;
     private boolean consoleAutoFollow = true;
     private long lastServerLogModified = -1;
     private String lastConsoleValue = "";
 
+    // Navigation
     private FrameLayout dashboardContent;
     private View homePage, consolePage;
     private TextView navHome, navConsole;
     private int currentTab = TAB_HOME;
+
+    // Collapsible category state
+    private boolean worldOpen = true;
+    private boolean serverOpen = false;
+    private boolean performanceOpen = false;
+    private boolean contentOpen = false;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -76,6 +104,7 @@ public class MainActivity extends Activity {
         AppPaths.ensure(this);
         requestNotificationPermission();
         selectedChannel = InstallService.selectedChannel(this);
+        handleIntent(getIntent(), false);
         render();
         handler.post(uiTicker);
     }
@@ -86,9 +115,34 @@ public class MainActivity extends Activity {
         if (screenShouldChange()) render();
     }
 
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIntent(intent, true);
+    }
+
     @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) configureWindow();
+    }
+
+    @Override public void onConfigurationChanged(Configuration newConfig) {
+        captureDraft();
+        super.onConfigurationChanged(newConfig);
+        configureWindow();
+        render();
+        restoreDraft();
+    }
+
+    private void handleIntent(Intent intent, boolean showNow) {
+        if (intent == null) return;
+        if ("console".equalsIgnoreCase(intent.getStringExtra(EXTRA_OPEN_TAB))) {
+            currentTab = TAB_CONSOLE;
+            if (showNow && ready()) showTab(TAB_CONSOLE, false);
+        } else if ("home".equalsIgnoreCase(intent.getStringExtra(EXTRA_OPEN_TAB))) {
+            currentTab = TAB_HOME;
+            if (showNow && ready()) showTab(TAB_HOME, false);
+        }
     }
 
     private void configureWindow() {
@@ -181,9 +235,31 @@ public class MainActivity extends Activity {
     private LinearLayout pageRoot() {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.VERTICAL);
-        r.setPadding(dp(18), dp(14), dp(18), dp(14));
+        int side = isWide() ? 28 : 16;
+        r.setPadding(dp(side), dp(12), dp(side), dp(10));
         r.setBackground(pageBg());
         return r;
+    }
+
+    private Typeface appTypeface(int style) {
+        try {
+            if (style == Typeface.BOLD) {
+                if (minecraftBold == null) {
+                    minecraftBold = getResources().getFont(R.font.minecraft_bold);
+                }
+                return minecraftBold;
+            }
+            if (minecraftRegular == null) {
+                minecraftRegular = getResources().getFont(R.font.minecraft_regular);
+            }
+            return minecraftRegular;
+        } catch (Throwable ignored) {
+            return Typeface.create("sans-serif", style);
+        }
+    }
+
+    private void applyAppTypeface(TextView view, int style) {
+        if (view != null) view.setTypeface(appTypeface(style));
     }
 
     private TextView tv(String text, float size, int color, int style) {
@@ -191,34 +267,46 @@ public class MainActivity extends Activity {
         v.setText(text);
         v.setTextSize(size);
         v.setTextColor(color);
-        v.setTypeface(Typeface.create("sans-serif", style));
+        applyAppTypeface(v, style);
         return v;
     }
 
     private LinearLayout header() {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, 0, 0, dp(12));
+        row.setPadding(0, 0, 0, dp(10));
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.bubble_internal_icon);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        row.addView(logo, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        row.addView(logo, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
+        words.setGravity(Gravity.CENTER_VERTICAL);
         words.setPadding(dp(10), 0, 0, 0);
-        words.addView(tv("B U B B L E", 17, WHITE, Typeface.BOLD));
-        words.addView(tv("B D S   H O S T", 10.5f, WHITE, Typeface.NORMAL));
+
+        ImageView wordmark = new ImageView(this);
+        wordmark.setImageResource(R.drawable.bubble_wordmark);
+        wordmark.setScaleType(ImageView.ScaleType.FIT_START);
+        wordmark.setAdjustViewBounds(true);
+        words.addView(wordmark, new LinearLayout.LayoutParams(
+                isWide() ? dp(220) : dp(178),
+                isWide() ? dp(32) : dp(27)));
+
+        TextView sub = tv("S E R V E R   H O S T", 9.5f, WHITE, Typeface.BOLD);
+        sub.setAlpha(.82f);
+        words.addView(sub, match(0,2,0,0));
         row.addView(words, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
         return row;
     }
 
     private TextView mainButton(String label) {
-        TextView b = tv(label, 17, WHITE, Typeface.BOLD);
+        TextView b = tv(label, 16.5f, WHITE, Typeface.BOLD);
         b.setGravity(Gravity.CENTER);
-        b.setMinHeight(dp(58));
+        b.setMinHeight(dp(60));
         b.setPadding(dp(14), dp(15), dp(14), dp(15));
         b.setBackground(gradient(new int[]{
                 Color.rgb(255,54,76),
@@ -239,11 +327,13 @@ public class MainActivity extends Activity {
         return b;
     }
 
+    // -----------------------------------------------------------------
+    // Installer
+    // -----------------------------------------------------------------
     private void buildInstaller() {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
         screen.setBackground(pageBg());
-        screen.setPadding(0,0,0,0);
         applyBottomSafeInset(screen, 6);
 
         LinearLayout top = pageRoot();
@@ -258,32 +348,36 @@ public class MainActivity extends Activity {
         ImageView hero = new ImageView(this);
         hero.setImageResource(R.drawable.bubble_internal_icon);
         hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(dp(104), dp(104));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(dp(92), dp(92));
         hp.gravity = Gravity.CENTER_HORIZONTAL;
         content.addView(hero, hp);
 
         TextView heroTitle = tv("Sua Bubble começa aqui", 21, WHITE, Typeface.BOLD);
         heroTitle.setGravity(Gravity.CENTER);
-        content.addView(heroTitle, match(0,9,0,6));
+        content.addView(heroTitle, match(0,8,0,5));
 
         TextView heroSub = tv(
-                "Prepare um host Bedrock local para mundos, experiências e áreas compartilhadas da Bubble.",
+                "Prepare o ambiente local para hospedar mundos e experiências compartilhadas.",
                 11.5f, Color.argb(230,255,238,241), Typeface.NORMAL);
         heroSub.setGravity(Gravity.CENTER);
-        heroSub.setPadding(dp(18),0,dp(18),0);
-        content.addView(heroSub, match(0,0,0,14));
+        heroSub.setPadding(dp(14),0,dp(14),0);
+        content.addView(heroSub, match(0,0,0,13));
 
         content.addView(infoCard(
-                "◈  Universo de bolso",
-                "A Bubble conecta experiências Bedrock em áreas compartilhadas sem transformar a interface em um painel técnico."),
-                match(0,0,0,9));
+                "◈  Ambiente sandbox",
+                "Cria uma área isolada no aparelho para executar o host local com segurança e persistência."),
+                match(0,0,0,8));
         content.addView(infoCard(
-                "⌁  Runtime local",
-                "Debian Trixie + Box64 + BDS ficam no próprio aparelho. O build parcial do Box64 é retomável."),
-                match(0,0,0,9));
+                "⌁  Compatibilidade virtual",
+                "Prepara o compilador virtual e os componentes de compatibilidade necessários para o servidor."),
+                match(0,0,0,8));
         content.addView(infoCard(
-                "↻  Continua em segundo plano",
-                "A instalação roda em foreground com Wake Lock. Girar a tela, bloquear ou sair do app não interrompe o processo."),
+                "⬡  Núcleo do servidor",
+                "Baixa, valida e prepara a versão selecionada sem expor detalhes internos da implementação."),
+                match(0,0,0,8));
+        content.addView(infoCard(
+                "↻  Execução resiliente",
+                "A preparação continua em segundo plano e pode retomar etapas interrompidas."),
                 match(0,0,0,10));
 
         contentScroll.addView(content);
@@ -325,7 +419,7 @@ public class MainActivity extends Activity {
         panel.addView(stageProgress, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(6)));
 
-        generalLabel = tv("Instalação geral • 0%",10.5f,MUTED,Typeface.NORMAL);
+        generalLabel = tv("Preparação geral • 0%",10.5f,MUTED,Typeface.NORMAL);
         panel.addView(generalLabel, match(0,8,0,0));
         generalProgress = horizontalProgress();
         panel.addView(generalProgress, new LinearLayout.LayoutParams(
@@ -338,7 +432,7 @@ public class MainActivity extends Activity {
                 Color.rgb(49,22,27), Color.rgb(115,78,86),14));
         versionSelector.setOnClickListener(v -> toggleVersionOptions());
         panel.addView(versionSelector, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(60)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(62)));
 
         versionOptions = new LinearLayout(this);
         versionOptions.setOrientation(LinearLayout.VERTICAL);
@@ -346,7 +440,7 @@ public class MainActivity extends Activity {
         versionOptions.setPadding(0,dp(5),0,0);
 
         TextView stable = versionOption(
-                "Atual / Alpha", InstallerManager.BDS_STABLE_VERSION);
+                "Atual / Estável", InstallerManager.BDS_STABLE_VERSION);
         stable.setOnClickListener(v -> selectChannel(InstallerManager.CHANNEL_STABLE));
         TextView preview = versionOption(
                 "Preview / Beta", InstallerManager.BDS_PREVIEW_VERSION);
@@ -355,7 +449,7 @@ public class MainActivity extends Activity {
         versionOptions.addView(preview);
         panel.addView(versionOptions);
 
-        installButton = mainButton("⇩   Instalar Tudo");
+        installButton = mainButton("⇩   Preparar Ambiente");
         installButton.setOnClickListener(v -> startInstall());
         panel.addView(installButton, match(0,9,0,0));
 
@@ -405,7 +499,7 @@ public class MainActivity extends Activity {
         versionSelector.setText(
                 InstallerManager.CHANNEL_PREVIEW.equals(selectedChannel)
                         ? "Preview / Beta   •   " + InstallerManager.BDS_PREVIEW_VERSION + "     ▾"
-                        : "Atual / Alpha   •   " + InstallerManager.BDS_STABLE_VERSION + "     ▾");
+                        : "Atual / Estável   •   " + InstallerManager.BDS_STABLE_VERSION + "     ▾");
     }
 
     private void startInstall() {
@@ -428,11 +522,11 @@ public class MainActivity extends Activity {
 
         generalProgress.setProgress(g);
         stageProgress.setProgress(s);
-        generalLabel.setText("Instalação geral • " + g + "%");
+        generalLabel.setText("Preparação geral • " + g + "%");
         stageLabel.setText(stage + " • " + s + "%");
         installButton.setText(running
-                ? "↻   Instalando em segundo plano..."
-                : "⇩   Instalar Tudo");
+                ? "↻   Preparando em segundo plano..."
+                : "⇩   Preparar Ambiente");
         installButton.setEnabled(!running);
         installButton.setAlpha(running ? .72f : 1f);
         versionSelector.setEnabled(!running);
@@ -449,16 +543,19 @@ public class MainActivity extends Activity {
         }
     }
 
+    // -----------------------------------------------------------------
+    // Dashboard
+    // -----------------------------------------------------------------
     private void buildDashboard() {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackground(pageBg());
-        shell.setPadding(0,0,0,0);
         applyBottomSafeInset(shell, 0);
 
         dashboardContent = new FrameLayout(this);
         homePage = buildHomePage();
         consolePage = buildConsolePage();
+
         dashboardContent.addView(homePage, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -478,20 +575,328 @@ public class MainActivity extends Activity {
     }
 
     private View buildHomePage() {
-        LinearLayout content = pageRoot();
-        content.addView(header());
-        content.addView(serverInfoCard(), match(0,0,0,12));
-        content.addView(worldCard(), match(0,0,0,10));
+        LinearLayout page = pageRoot();
+        page.addView(header());
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+
+        content.addView(serverInfoCard(), match(0,0,0,10));
+
+        configLockNotice = tv(
+                "🔒 Configurações bloqueadas enquanto o servidor estiver ativo.",
+                10.5f, WHITE, Typeface.BOLD);
+        configLockNotice.setGravity(Gravity.CENTER);
+        configLockNotice.setPadding(dp(12),dp(10),dp(12),dp(10));
+        configLockNotice.setBackground(box(
+                Color.argb(80,20,10,12),
+                Color.argb(90,255,255,255),14));
+        configLockNotice.setVisibility(View.GONE);
+        content.addView(configLockNotice, match(0,0,0,9));
+
+        configurationArea = new LinearLayout(this);
+        configurationArea.setOrientation(LinearLayout.VERTICAL);
+
+        configurationArea.addView(categoryCard(
+                "◈ Mundo",
+                "Identidade, geração e regras básicas",
+                buildWorldCategory(),
+                worldOpen,
+                0), match(0,0,0,8));
+
+        configurationArea.addView(categoryCard(
+                "⬡ Servidor",
+                "Nome, jogadores, rede e acesso",
+                buildServerCategory(),
+                serverOpen,
+                1), match(0,0,0,8));
+
+        configurationArea.addView(categoryCard(
+                "⚙ Performance",
+                "Distâncias, threads e geração",
+                buildPerformanceCategory(),
+                performanceOpen,
+                2), match(0,0,0,8));
+
+        configurationArea.addView(categoryCard(
+                "▦ Conteúdo",
+                "Pacotes, permissões e recursos",
+                buildContentCategory(),
+                contentOpen,
+                3), match(0,0,0,10));
+
+        content.addView(configurationArea);
+
+        serverButton = mainButton("▶  Iniciar Servidor");
+        serverButton.setOnClickListener(v -> toggleServer());
+        content.addView(serverButton, match(0,0,0,10));
+
         scroll.addView(content);
-        return scroll;
+        page.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        return page;
+    }
+
+    private View categoryCard(
+            String title,
+            String subtitle,
+            View categoryContent,
+            boolean expanded,
+            int categoryIndex) {
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14),dp(12),dp(14),dp(12));
+        card.setBackground(box(CARD,Color.argb(70,255,90,110),20));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setClickable(true);
+
+        LinearLayout words = new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.addView(tv(title,16.5f,WHITE,Typeface.BOLD));
+        TextView sub = tv(subtitle,10.5f,MUTED,Typeface.NORMAL);
+        sub.setPadding(0,dp(2),0,0);
+        words.addView(sub);
+        head.addView(words,new LinearLayout.LayoutParams(
+                0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+
+        TextView arrow = tv(expanded ? "−" : "+",22,WHITE,Typeface.BOLD);
+        arrow.setGravity(Gravity.CENTER);
+        head.addView(arrow,new LinearLayout.LayoutParams(dp(42),dp(42)));
+
+        categoryContent.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        head.setOnClickListener(v -> {
+            boolean open = categoryContent.getVisibility() != View.VISIBLE;
+            categoryContent.setVisibility(open ? View.VISIBLE : View.GONE);
+            arrow.setText(open ? "−" : "+");
+            setCategoryOpen(categoryIndex, open);
+        });
+
+        card.addView(head);
+        card.addView(categoryContent, match(0,10,0,0));
+        return card;
+    }
+
+    private void setCategoryOpen(int index, boolean value) {
+        if (index == 0) worldOpen = value;
+        else if (index == 1) serverOpen = value;
+        else if (index == 2) performanceOpen = value;
+        else if (index == 3) contentOpen = value;
+    }
+
+    private View buildWorldCategory() {
+        LinearLayout c = categoryContent();
+
+        worldName = field("Meu Mundo Bubble");
+        seed = field("Opcional");
+        seed.setInputType(InputType.TYPE_CLASS_TEXT);
+
+        c.addView(responsivePair(
+                fieldBlock("Nome do mundo", worldName),
+                fieldBlock("Seed", seed)), match(0,0,0,11));
+
+        c.addView(label("Modo de jogo"));
+        LinearLayout modes = new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        survival = segment("⚔ Survival", true);
+        creative = segment("◇ Criativo", false);
+        survival.setOnClickListener(v -> mode(false));
+        creative.setOnClickListener(v -> mode(true));
+        modes.addView(survival,new LinearLayout.LayoutParams(0,dp(60),1));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0,dp(60),1);
+        cp.setMargins(dp(7),0,0,0);
+        modes.addView(creative,cp);
+        c.addView(modes, match(0,5,0,11));
+
+        c.addView(label("Dificuldade"));
+        String[] diffs = {"Pacífico","Fácil","Normal","Difícil"};
+        String[] values = {"peaceful","easy","normal","hard"};
+        LinearLayout diffRow = new LinearLayout(this);
+        diffRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i=0;i<4;i++) {
+            final String value = values[i];
+            difficultyButtons[i] = segment(diffs[i], "normal".equals(value));
+            difficultyButtons[i].setTextSize(isWide() ? 12.5f : 10.5f);
+            difficultyButtons[i].setOnClickListener(v -> setDifficulty(value));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(56),1);
+            if (i>0) lp.setMargins(dp(5),0,0,0);
+            diffRow.addView(difficultyButtons[i],lp);
+        }
+        c.addView(diffRow, match(0,5,0,11));
+
+        cheats = styledSwitch("Cheats", "Permitir comandos no mundo");
+        forceGamemode = styledSwitch(
+                "Forçar modo de jogo",
+                "Jogadores entram no modo definido acima");
+
+        c.addView(responsivePair(
+                switchBlock(cheats),
+                switchBlock(forceGamemode)));
+
+        return c;
+    }
+
+    private View buildServerCategory() {
+        LinearLayout c = categoryContent();
+
+        serverName = field("Bubble BDS Host");
+        maxPlayers = numericField("8");
+        serverPort = numericField("19132");
+        idleTimeout = numericField("30");
+
+        c.addView(fieldBlock("Nome do servidor", serverName), match(0,0,0,10));
+        c.addView(responsivePair(
+                fieldBlock("Máximo de jogadores", maxPlayers),
+                fieldBlock("Porta", serverPort)), match(0,0,0,10));
+        c.addView(fieldBlock("Timeout AFK (minutos)", idleTimeout), match(0,0,0,10));
+
+        allowList = styledSwitch("Lista de acesso", "Somente jogadores autorizados");
+        onlineMode = styledSwitch("Validação online", "Validar identidade dos jogadores");
+
+        c.addView(responsivePair(
+                switchBlock(allowList),
+                switchBlock(onlineMode)));
+
+        return c;
+    }
+
+    private View buildPerformanceCategory() {
+        LinearLayout c = categoryContent();
+
+        viewDistance = numericField("32");
+        tickDistance = numericField("4");
+        maxThreads = numericField("8");
+
+        c.addView(responsivePair(
+                fieldBlock("Distância de visão", viewDistance),
+                fieldBlock("Distância de simulação", tickDistance)), match(0,0,0,10));
+        c.addView(fieldBlock("Threads máximas (0 = automático)", maxThreads), match(0,0,0,10));
+
+        clientChunkGeneration = styledSwitch(
+                "Geração pelo cliente",
+                "Permitir geração de chunks pelo cliente");
+        c.addView(switchBlock(clientChunkGeneration));
+
+        return c;
+    }
+
+    private View buildContentCategory() {
+        LinearLayout c = categoryContent();
+
+        c.addView(label("Permissão padrão"));
+        String[] labels = {"Visitante","Membro","Operador"};
+        String[] values = {"visitor","member","operator"};
+        LinearLayout permRow = new LinearLayout(this);
+        permRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i=0;i<3;i++) {
+            final String value = values[i];
+            permissionButtons[i] = segment(labels[i], "member".equals(value));
+            permissionButtons[i].setTextSize(isWide() ? 12.5f : 11f);
+            permissionButtons[i].setOnClickListener(v -> setPermission(value));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(58),1);
+            if (i>0) lp.setMargins(dp(5),0,0,0);
+            permRow.addView(permissionButtons[i],lp);
+        }
+        c.addView(permRow, match(0,5,0,11));
+
+        resourcePackRequired = styledSwitch(
+                "Pacote de recursos obrigatório",
+                "Exigir aceite do pacote para entrar");
+        c.addView(switchBlock(resourcePackRequired), match(0,0,0,8));
+
+        TextView addons = tv(
+                "Add-ons ativos são detectados automaticamente no mundo.",
+                10.5f,MUTED,Typeface.NORMAL);
+        addons.setPadding(dp(2),dp(4),dp(2),dp(2));
+        c.addView(addons);
+        return c;
+    }
+
+    private LinearLayout categoryContent() {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        return c;
+    }
+
+    private View fieldBlock(String title, EditText field) {
+        LinearLayout block = new LinearLayout(this);
+        block.setOrientation(LinearLayout.VERTICAL);
+        block.addView(label(title));
+        block.addView(field, fixedHeight(76,0,5,0,0));
+        return block;
+    }
+
+    private View switchBlock(Switch sw) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setGravity(Gravity.CENTER_VERTICAL);
+        wrap.setMinHeight(dp(68));
+        wrap.setPadding(dp(12),dp(7),dp(8),dp(7));
+        wrap.setBackground(box(
+                Color.rgb(39,24,27),
+                Color.rgb(87,66,72),14));
+        wrap.addView(sw,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        return wrap;
+    }
+
+    private Switch styledSwitch(String title, String subtitle) {
+        Switch sw = new Switch(this);
+        sw.setText(title + "\n" + subtitle);
+        sw.setTextColor(MUTED);
+        sw.setTextSize(11.5f);
+        applyAppTypeface(sw, Typeface.NORMAL);
+        sw.setGravity(Gravity.CENTER_VERTICAL);
+        sw.setPadding(dp(2),0,0,0);
+        sw.setThumbTintList(new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}},
+                new int[]{WHITE,Color.rgb(210,205,207)}));
+        sw.setTrackTintList(new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}},
+                new int[]{RED,Color.rgb(92,72,78)}));
+        return sw;
+    }
+
+    private View responsivePair(View a, View b) {
+        LinearLayout row = new LinearLayout(this);
+        if (isWide()) {
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.addView(a,new LinearLayout.LayoutParams(
+                    0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+                    0,ViewGroup.LayoutParams.WRAP_CONTENT,1);
+            bp.setMargins(dp(9),0,0,0);
+            row.addView(b,bp);
+        } else {
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.addView(a,new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            bp.setMargins(0,dp(9),0,0);
+            row.addView(b,bp);
+        }
+        return row;
+    }
+
+    private boolean isWide() {
+        return getResources().getConfiguration().screenWidthDp >= 600;
     }
 
     private View buildConsolePage() {
         LinearLayout page = pageRoot();
-        page.setPadding(dp(14),dp(12),dp(14),dp(10));
+        page.setPadding(dp(isWide()?28:14),dp(12),dp(isWide()?28:14),dp(10));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
@@ -500,7 +905,7 @@ public class MainActivity extends Activity {
         title.setOrientation(LinearLayout.VERTICAL);
         title.addView(tv("Console do Servidor",20,WHITE,Typeface.BOLD));
         title.addView(tv(
-                "Log completo em tempo real • comandos limitados",
+                "Log em tempo real • comandos seguros",
                 10.5f,Color.argb(225,255,236,239),Typeface.NORMAL));
         top.addView(title,new LinearLayout.LayoutParams(
                 0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
@@ -531,6 +936,7 @@ public class MainActivity extends Activity {
         LinearLayout commandRow = new LinearLayout(this);
         commandRow.setGravity(Gravity.CENTER_VERTICAL);
         commandInput = field("Digite um comando: list, help, say...");
+        commandInput.setTypeface(Typeface.MONOSPACE);
         commandInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
         commandInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
@@ -551,7 +957,7 @@ public class MainActivity extends Activity {
         page.addView(commandRow,match(0,9,0,0));
 
         TextView allowed = tv(
-                "Permitidos pela Bubble: list • help • say • tell/msg/w • seed",
+                "Permitidos: list • help • say • tell/msg/w • seed",
                 9.5f,MUTED,Typeface.NORMAL);
         allowed.setGravity(Gravity.CENTER);
         page.addView(allowed,match(0,5,0,0));
@@ -560,10 +966,14 @@ public class MainActivity extends Activity {
     }
 
     private View buildBottomNavigation() {
+        LinearLayout outer = new LinearLayout(this);
+        outer.setGravity(Gravity.CENTER);
+        outer.setPadding(dp(10),dp(6),dp(10),dp(6));
+
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
-        bar.setPadding(dp(12),dp(7),dp(12),dp(7));
+        bar.setPadding(dp(8),dp(6),dp(8),dp(6));
         bar.setBackground(box(
                 Color.rgb(38,12,17),
                 Color.argb(110,255,82,103),22));
@@ -579,7 +989,10 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams two = new LinearLayout.LayoutParams(0,dp(62),1);
         two.setMargins(dp(8),0,0,0);
         bar.addView(navConsole,two);
-        return bar;
+
+        int maxWidth = isWide() ? dp(620) : ViewGroup.LayoutParams.MATCH_PARENT;
+        outer.addView(bar,new LinearLayout.LayoutParams(maxWidth,ViewGroup.LayoutParams.WRAP_CONTENT));
+        return outer;
     }
 
     private TextView navItem(String label) {
@@ -617,6 +1030,9 @@ public class MainActivity extends Activity {
         }
     }
 
+    // -----------------------------------------------------------------
+    // Summary + form state
+    // -----------------------------------------------------------------
     private View serverInfoCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -649,64 +1065,6 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private View worldCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16),dp(16),dp(16),dp(16));
-        card.setBackground(box(CARD,Color.argb(70,255,90,110),22));
-
-        card.addView(tv("◈  Configurações do Mundo",17.5f,WHITE,Typeface.BOLD));
-        card.addView(label("Nome do mundo"), match(0,13,0,0));
-        worldName = field("Meu Mundo Bubble");
-        card.addView(worldName, fixedHeight(76,0,5,0,13));
-
-        card.addView(label("Modo de jogo"));
-        LinearLayout modes = new LinearLayout(this);
-        survival = segment("⚔  Survival",true);
-        creative = segment("◇  Criativo",false);
-        survival.setOnClickListener(v -> mode(false));
-        creative.setOnClickListener(v -> mode(true));
-        modes.addView(survival,new LinearLayout.LayoutParams(0,dp(60),1));
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0,dp(60),1);
-        cp.setMargins(dp(7),0,0,0);
-        modes.addView(creative,cp);
-        card.addView(modes, match(0,5,0,13));
-
-        LinearLayout cheatsRow = new LinearLayout(this);
-        cheatsRow.setGravity(Gravity.CENTER_VERTICAL);
-        cheatsRow.setMinimumHeight(dp(60));
-        LinearLayout cheatText = new LinearLayout(this);
-        cheatText.setOrientation(LinearLayout.VERTICAL);
-        cheatText.addView(tv("Cheats",13,MUTED,Typeface.BOLD));
-        cheatText.addView(tv("Permitir comandos no mundo",10,MUTED,Typeface.NORMAL));
-        cheatsRow.addView(cheatText,new LinearLayout.LayoutParams(
-                0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
-
-        cheats = new Switch(this);
-        cheats.setThumbTintList(new ColorStateList(
-                new int[][]{
-                        new int[]{android.R.attr.state_checked},
-                        new int[]{}},
-                new int[]{WHITE,Color.rgb(210,205,207)}));
-        cheats.setTrackTintList(new ColorStateList(
-                new int[][]{
-                        new int[]{android.R.attr.state_checked},
-                        new int[]{}},
-                new int[]{RED,Color.rgb(92,72,78)}));
-        cheatsRow.addView(cheats);
-        card.addView(cheatsRow, match(0,0,0,13));
-
-        card.addView(label("Seed"));
-        seed = field("");
-        seed.setInputType(InputType.TYPE_CLASS_TEXT);
-        card.addView(seed, fixedHeight(76,0,5,0,13));
-
-        serverButton = mainButton("▶  Iniciar Servidor");
-        serverButton.setOnClickListener(v -> toggleServer());
-        card.addView(serverButton);
-        return card;
-    }
-
     private TextView label(String text) {
         return tv(text,12,MUTED,Typeface.BOLD);
     }
@@ -718,11 +1076,18 @@ public class MainActivity extends Activity {
         e.setHintTextColor(Color.rgb(150,138,143));
         e.setHint(hint);
         e.setTextSize(13.5f);
+        applyAppTypeface(e, Typeface.NORMAL);
         e.setMinHeight(dp(76));
         e.setPadding(dp(16),dp(8),dp(16),dp(8));
         e.setBackground(box(
                 Color.rgb(39,24,27),
                 Color.rgb(111,90,96),14));
+        return e;
+    }
+
+    private EditText numericField(String hint) {
+        EditText e = field(hint);
+        e.setInputType(InputType.TYPE_CLASS_NUMBER);
         return e;
     }
 
@@ -739,7 +1104,6 @@ public class MainActivity extends Activity {
     private void mode(boolean creativeValue) {
         creativeMode = creativeValue;
         if (survival == null || creative == null) return;
-
         survival.setBackground(box(
                 creativeValue ? Color.rgb(45,28,32) : Color.rgb(175,22,43),
                 creativeValue ? Color.rgb(91,72,77) : Color.rgb(255,68,89),14));
@@ -750,6 +1114,68 @@ public class MainActivity extends Activity {
         creative.setTextColor(creativeValue ? WHITE : MUTED);
     }
 
+    private void setDifficulty(String value) {
+        difficultyValue = value;
+        String[] values = {"peaceful","easy","normal","hard"};
+        for (int i=0;i<difficultyButtons.length;i++) {
+            if (difficultyButtons[i] == null) continue;
+            boolean active = values[i].equals(value);
+            difficultyButtons[i].setBackground(box(
+                    active ? Color.rgb(175,22,43) : Color.rgb(45,28,32),
+                    active ? Color.rgb(255,68,89) : Color.rgb(91,72,77),14));
+            difficultyButtons[i].setTextColor(active ? WHITE : MUTED);
+        }
+    }
+
+    private void setPermission(String value) {
+        permissionValue = value;
+        String[] values = {"visitor","member","operator"};
+        for (int i=0;i<permissionButtons.length;i++) {
+            if (permissionButtons[i] == null) continue;
+            boolean active = values[i].equals(value);
+            permissionButtons[i].setBackground(box(
+                    active ? Color.rgb(175,22,43) : Color.rgb(45,28,32),
+                    active ? Color.rgb(255,68,89) : Color.rgb(91,72,77),14));
+            permissionButtons[i].setTextColor(active ? WHITE : MUTED);
+        }
+    }
+
+    private void setConfigurationLocked(boolean locked) {
+        if (configurationArea == null) return;
+        setEnabledRecursive(configurationArea, !locked);
+        configurationArea.setAlpha(locked ? .48f : 1f);
+        if (configLockNotice != null) {
+            configLockNotice.setVisibility(locked ? View.VISIBLE : View.GONE);
+        }
+        if (locked) {
+            View focused = getCurrentFocus();
+            if (focused != null && isDescendant(configurationArea, focused)) focused.clearFocus();
+        }
+    }
+
+    private boolean isDescendant(ViewGroup parent, View child) {
+        View current = child;
+        while (current != null) {
+            if (current == parent) return true;
+            if (!(current.getParent() instanceof View)) break;
+            current = (View) current.getParent();
+        }
+        return false;
+    }
+
+    private void setEnabledRecursive(View view, boolean enabled) {
+        view.setEnabled(enabled);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup)view;
+            for (int i=0;i<group.getChildCount();i++) {
+                setEnabledRecursive(group.getChildAt(i), enabled);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Server control
+    // -----------------------------------------------------------------
     private void sendSafeCommand() {
         if (commandInput == null) return;
         String cmd = commandInput.getText().toString().trim();
@@ -796,7 +1222,7 @@ public class MainActivity extends Activity {
         try {
             saveConfig();
         } catch (Exception e) {
-            appendLocalConsole("[bubble] Falha ao salvar configurações: " + e.getMessage());
+            appendLocalConsole("[bubble] Configuração inválida: " + e.getMessage());
             return;
         }
 
@@ -809,8 +1235,10 @@ public class MainActivity extends Activity {
 
     private void updateServerUi() {
         if (!ready() || serverButton == null) return;
+
         String state = BdsService.state(this);
         boolean running = BdsService.isRunning(this);
+        setConfigurationLocked(running);
 
         if ("stopping".equals(state)) {
             serverButton.setText("■  Parando Servidor...");
@@ -828,26 +1256,39 @@ public class MainActivity extends Activity {
 
         String world = getProperty("level-name","Meu Mundo Bubble");
         String mode = getProperty("gamemode","survival");
+        String difficulty = getProperty("difficulty","normal");
         String port = getProperty("server-port","19132");
-        String serverName = getProperty("server-name","Bubble BDS Host");
+        String server = getProperty("server-name","Bubble BDS Host");
         String ip = BdsService.getLocalIpv4();
 
         infoState.setText(running
-                ? "● " + serverName + " • Online"
-                : "● " + serverName + " • Pronto");
+                ? "● " + server + " • Online"
+                : "● " + server + " • Pronto");
         infoState.setTextColor(running ? Color.rgb(89,246,158) : WHITE);
         infoVersion.setText(
                 InstallerManager.readInstalledBdsChannel(this)
                         + " • " + InstallerManager.readInstalledBdsVersion(this));
         infoWorld.setText("Mundo: " + world);
         infoMode.setText(
-                "Modo: "
-                        + ("creative".equalsIgnoreCase(mode) ? "Criativo" : "Survival")
-                        + "   •   Cheats: "
-                        + ("true".equalsIgnoreCase(
-                                getProperty("allow-cheats","false")) ? "ON" : "OFF"));
-        infoAddress.setText("IP local: " + ip + ":" + port);
-        infoAddons.setText("Add-ons do mundo: " + countWorldAddons(world));
+                "Modo: " + prettyMode(mode)
+                        + "   •   Dificuldade: " + prettyDifficulty(difficulty));
+        infoAddress.setText("Rede local: " + ip + ":" + port);
+        infoAddons.setText(
+                "Add-ons ativos: " + countWorldAddons(world)
+                        + "   •   Jogadores: " + getProperty("max-players","8"));
+    }
+
+    private String prettyMode(String mode) {
+        if ("creative".equalsIgnoreCase(mode)) return "Criativo";
+        if ("adventure".equalsIgnoreCase(mode)) return "Aventura";
+        return "Survival";
+    }
+
+    private String prettyDifficulty(String value) {
+        if ("peaceful".equalsIgnoreCase(value)) return "Pacífico";
+        if ("easy".equalsIgnoreCase(value)) return "Fácil";
+        if ("hard".equalsIgnoreCase(value)) return "Difícil";
+        return "Normal";
     }
 
     private int countWorldAddons(String world) {
@@ -872,33 +1313,106 @@ public class MainActivity extends Activity {
         return count;
     }
 
+    // -----------------------------------------------------------------
+    // Configuration persistence
+    // -----------------------------------------------------------------
     private void loadConfig() {
         if (worldName == null) return;
+
         worldName.setText(getProperty("level-name","Meu Mundo Bubble"));
         seed.setText(getProperty("level-seed",""));
-        cheats.setChecked(
-                "true".equalsIgnoreCase(getProperty("allow-cheats","false")));
+        serverName.setText(getProperty("server-name","Bubble BDS Host"));
+        maxPlayers.setText(getProperty("max-players","8"));
+        serverPort.setText(getProperty("server-port","19132"));
+        idleTimeout.setText(getProperty("player-idle-timeout","30"));
+        viewDistance.setText(getProperty("view-distance","32"));
+        tickDistance.setText(getProperty("tick-distance","4"));
+        maxThreads.setText(getProperty("max-threads","8"));
+
+        cheats.setChecked(boolProperty("allow-cheats",false));
+        forceGamemode.setChecked(boolProperty("force-gamemode",false));
+        allowList.setChecked(boolProperty("allow-list",false));
+        onlineMode.setChecked(boolProperty("online-mode",true));
+        resourcePackRequired.setChecked(boolProperty("texturepack-required",false));
+        clientChunkGeneration.setChecked(
+                boolProperty("client-side-chunk-generation-enabled",true));
+
         mode("creative".equalsIgnoreCase(getProperty("gamemode","survival")));
+        setDifficulty(getProperty("difficulty","normal"));
+        setPermission(getProperty("default-player-permission-level","member"));
+    }
+
+    private boolean boolProperty(String key, boolean fallback) {
+        String v = getProperty(key, fallback ? "true" : "false");
+        return "true".equalsIgnoreCase(v);
     }
 
     private void saveConfig() throws Exception {
         File f = new File(AppPaths.bds(this),"server.properties");
         if (!f.isFile()) {
-            throw new IllegalStateException("server.properties não encontrado");
+            throw new IllegalStateException("Arquivo de configuração do servidor não encontrado");
         }
 
         String text = read(f);
-        String name = worldName.getText().toString().trim();
-        if (name.isEmpty()) name = "Meu Mundo Bubble";
 
-        text = replace(text,"level-name",name);
+        String world = clean(worldName.getText().toString());
+        if (world.isEmpty()) world = "Meu Mundo Bubble";
+
+        String server = clean(serverName.getText().toString());
+        if (server.isEmpty()) server = "Bubble BDS Host";
+
+        int players = intValue(maxPlayers, 1, 1000, "Máximo de jogadores");
+        int port = intValue(serverPort, 1, 65535, "Porta");
+        int idle = intValue(idleTimeout, 0, 1440, "Timeout AFK");
+        int view = intValue(viewDistance, 4, 96, "Distância de visão");
+        int tick = intValue(tickDistance, 4, 12, "Distância de simulação");
+        int threads = intValue(maxThreads, 0, 128, "Threads máximas");
+
+        text = replace(text,"level-name",world);
+        text = replace(text,"level-seed",clean(seed.getText().toString()));
         text = replace(text,"gamemode",creativeMode ? "creative" : "survival");
-        text = replace(text,"allow-cheats",cheats.isChecked() ? "true" : "false");
-        text = replace(text,"level-seed",seed.getText().toString().trim());
+        text = replace(text,"difficulty",difficultyValue);
+        text = replace(text,"allow-cheats",String.valueOf(cheats.isChecked()));
+        text = replace(text,"force-gamemode",String.valueOf(forceGamemode.isChecked()));
+        text = replace(text,"default-player-permission-level",permissionValue);
+
+        text = replace(text,"server-name",server);
+        text = replace(text,"max-players",String.valueOf(players));
+        text = replace(text,"server-port",String.valueOf(port));
+        text = replace(text,"allow-list",String.valueOf(allowList.isChecked()));
+        text = replace(text,"online-mode",String.valueOf(onlineMode.isChecked()));
+        text = replace(text,"player-idle-timeout",String.valueOf(idle));
+
+        text = replace(text,"view-distance",String.valueOf(view));
+        text = replace(text,"tick-distance",String.valueOf(tick));
+        text = replace(text,"max-threads",String.valueOf(threads));
+        text = replace(text,"client-side-chunk-generation-enabled",
+                String.valueOf(clientChunkGeneration.isChecked()));
+
+        text = replace(text,"texturepack-required",
+                String.valueOf(resourcePackRequired.isChecked()));
 
         try (FileOutputStream out = new FileOutputStream(f)) {
             out.write(text.getBytes(StandardCharsets.UTF_8));
         }
+    }
+
+    private int intValue(EditText field, int min, int max, String label) {
+        try {
+            String raw = field.getText().toString().trim();
+            int value = Integer.parseInt(raw);
+            if (value < min || value > max) throw new NumberFormatException();
+            field.setError(null);
+            return value;
+        } catch (Exception e) {
+            field.setError(label + ": " + min + "–" + max);
+            throw new IllegalArgumentException(label + " inválido");
+        }
+    }
+
+    private String clean(String value) {
+        if (value == null) return "";
+        return value.replace('\n',' ').replace('\r',' ').trim();
     }
 
     private String getProperty(String key, String fallback) {
@@ -942,6 +1456,60 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Draft preservation during rotation
+    private String[] draft;
+    private boolean draftValid;
+
+    private void captureDraft() {
+        if (worldName == null || BdsService.isRunning(this)) return;
+        draft = new String[]{
+                worldName.getText().toString(),
+                seed.getText().toString(),
+                serverName.getText().toString(),
+                maxPlayers.getText().toString(),
+                serverPort.getText().toString(),
+                idleTimeout.getText().toString(),
+                viewDistance.getText().toString(),
+                tickDistance.getText().toString(),
+                maxThreads.getText().toString(),
+                String.valueOf(cheats.isChecked()),
+                String.valueOf(forceGamemode.isChecked()),
+                String.valueOf(allowList.isChecked()),
+                String.valueOf(onlineMode.isChecked()),
+                String.valueOf(resourcePackRequired.isChecked()),
+                String.valueOf(clientChunkGeneration.isChecked()),
+                String.valueOf(creativeMode),
+                difficultyValue,
+                permissionValue
+        };
+        draftValid = true;
+    }
+
+    private void restoreDraft() {
+        if (!draftValid || draft == null || worldName == null || draft.length < 18) return;
+        worldName.setText(draft[0]);
+        seed.setText(draft[1]);
+        serverName.setText(draft[2]);
+        maxPlayers.setText(draft[3]);
+        serverPort.setText(draft[4]);
+        idleTimeout.setText(draft[5]);
+        viewDistance.setText(draft[6]);
+        tickDistance.setText(draft[7]);
+        maxThreads.setText(draft[8]);
+        cheats.setChecked(Boolean.parseBoolean(draft[9]));
+        forceGamemode.setChecked(Boolean.parseBoolean(draft[10]));
+        allowList.setChecked(Boolean.parseBoolean(draft[11]));
+        onlineMode.setChecked(Boolean.parseBoolean(draft[12]));
+        resourcePackRequired.setChecked(Boolean.parseBoolean(draft[13]));
+        clientChunkGeneration.setChecked(Boolean.parseBoolean(draft[14]));
+        mode(Boolean.parseBoolean(draft[15]));
+        setDifficulty(draft[16]);
+        setPermission(draft[17]);
+    }
+
+    // -----------------------------------------------------------------
+    // Console
+    // -----------------------------------------------------------------
     private void refreshServerConsole(boolean force) {
         if (consoleText == null) return;
         File f = AppPaths.serverLog(this);

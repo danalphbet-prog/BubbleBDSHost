@@ -42,7 +42,7 @@
             android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Installs local Debian, Box64 and Minecraft Bedrock server runtime" />
+                android:value="Prepares the local Bubble sandbox environment" />
         </service>
 
         <service
@@ -52,7 +52,7 @@
             android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Local Minecraft Bedrock dedicated server hosting" />
+                android:value="Runs the local Bubble game server" />
         </service>
     </application>
 </manifest>

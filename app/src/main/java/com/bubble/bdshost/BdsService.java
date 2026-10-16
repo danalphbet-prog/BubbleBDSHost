@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -16,6 +17,7 @@ import android.os.PowerManager;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -53,7 +55,8 @@ public class BdsService extends Service {
         String action = intent.getAction();
         if (ACTION_START.equals(action)) startServer();
         else if (ACTION_STOP.equals(action)) stopServerGracefully();
-        else if (ACTION_COMMAND.equals(action)) sendCommand(intent.getStringExtra(EXTRA_COMMAND));
+        else if (ACTION_COMMAND.equals(action))
+            sendCommand(intent.getStringExtra(EXTRA_COMMAND));
         return START_NOT_STICKY;
     }
 
@@ -61,7 +64,7 @@ public class BdsService extends Service {
         if (process != null && process.isAlive()) return;
         File server = new File(AppPaths.bds(this), "bedrock_server");
         if (!server.exists()) {
-            appendLog("[bubble] BDS não instalado.\n");
+            appendLog("[bubble] Núcleo do servidor não instalado.\n");
             setState("stopped", 0);
             stopSelf();
             return;
@@ -102,7 +105,11 @@ public class BdsService extends Service {
                 }
                 setState("stopped", 0);
                 releaseWakeLock();
-                stopForeground(STOP_FOREGROUND_REMOVE);
+                if (Build.VERSION.SDK_INT >= 24) {
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                } else {
+                    stopForeground(true);
+                }
                 stopSelf();
             }
         }, "bds-runtime").start();
@@ -146,7 +153,9 @@ public class BdsService extends Service {
 
     public static boolean isRunning(Context c) {
         String state = state(c);
-        return "starting".equals(state) || "running".equals(state) || "stopping".equals(state);
+        return "starting".equals(state)
+                || "running".equals(state)
+                || "stopping".equals(state);
     }
 
     public static String state(Context c) {
@@ -158,7 +167,10 @@ public class BdsService extends Service {
     }
 
     private void setState(String state, long startedAt) {
-        prefs(this).edit().putString("state", state).putLong("started_at", startedAt).apply();
+        prefs(this).edit()
+                .putString("state", state)
+                .putLong("started_at", startedAt)
+                .apply();
     }
 
     private static SharedPreferences prefs(Context c) {
@@ -168,7 +180,8 @@ public class BdsService extends Service {
     private void appendLog(String text) {
         try {
             AppPaths.ensure(this);
-            try (FileOutputStream out = new FileOutputStream(AppPaths.serverLog(this), true)) {
+            try (FileOutputStream out =
+                         new FileOutputStream(AppPaths.serverLog(this), true)) {
                 out.write(text.getBytes(StandardCharsets.UTF_8));
             }
         } catch (Exception ignored) {}
@@ -177,7 +190,8 @@ public class BdsService extends Service {
     private void acquireWakeLock() {
         try {
             PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BubbleBDSHost:server");
+            wakeLock = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK, "BubbleBDSHost:server");
             wakeLock.setReferenceCounted(false);
             wakeLock.acquire();
         } catch (Exception ignored) {}
@@ -192,8 +206,11 @@ public class BdsService extends Service {
     private void createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationChannel ch = new NotificationChannel(
-                    CHANNEL, "Servidor Bedrock", NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("Servidor Bedrock ativo em segundo plano");
+                    CHANNEL, "Bubble • Servidor", NotificationManager.IMPORTANCE_LOW);
+            ch.setDescription("Status do servidor local em segundo plano");
+            ch.setSound(null, null);
+            ch.enableVibration(false);
+            ch.setShowBadge(false);
             getSystemService(NotificationManager.class).createNotificationChannel(ch);
         }
     }
@@ -202,56 +219,87 @@ public class BdsService extends Service {
         String serverName = property("server-name", "Bubble BDS Host");
         String world = property("level-name", "Mundo Bubble");
         String mode = property("gamemode", "survival");
+        String difficulty = property("difficulty", "normal");
         String port = property("server-port", "19132");
+        String maxPlayers = property("max-players", "8");
         String ip = getLocalIpv4();
         String state = state(this);
         long started = startedAt(this);
-        String elapsed = started > 0 ? formatDuration(System.currentTimeMillis() - started) : "00:00:00";
 
-        Intent open = new Intent(this, MainActivity.class);
+        Intent open = new Intent(this, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_OPEN_TAB, "home")
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent content = PendingIntent.getActivity(
-                this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                this, 0, open,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        Intent console = new Intent(this, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_OPEN_TAB, "console")
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent consolePi = PendingIntent.getActivity(
+                this, 2, console,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
         Intent stop = new Intent(this, BdsService.class).setAction(ACTION_STOP);
         PendingIntent stopPi = PendingIntent.getService(
-                this, 1, stop, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                this, 1, stop,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
         String stateLabel = "running".equals(state) ? "Online" :
                 "starting".equals(state) ? "Iniciando" :
                 "stopping".equals(state) ? "Parando" : "Offline";
-        String line = stateLabel + " • " + elapsed + " • " + ip + ":" + port;
 
-        String big = "Servidor: " + serverName +
-                "\nMundo: " + world +
-                "\nModo: " + prettyMode(mode) +
-                "\nIP local: " + ip +
-                "\nPorta: " + port +
-                "\nTempo ativo: " + elapsed +
-                "\nBDS: " + InstallerManager.readInstalledBdsVersion(this);
+        String line = stateLabel + " • " + prettyMode(mode)
+                + " • " + ip + ":" + port;
 
-        return new Notification.Builder(this, CHANNEL)
-                .setContentTitle("Bubble BDS • " + world)
+        String big = "Servidor: " + serverName
+                + "\nMundo: " + world
+                + "\nModo: " + prettyMode(mode)
+                + " • " + prettyDifficulty(difficulty)
+                + "\nRede local: " + ip + ":" + port
+                + "\nJogadores: até " + maxPlayers
+                + "\nVersão: " + InstallerManager.readInstalledBdsVersion(this);
+
+        Notification.Builder b = new Notification.Builder(this, CHANNEL)
+                .setContentTitle("Bubble • " + world)
                 .setContentText(line)
+                .setSubText("Servidor local")
                 .setStyle(new Notification.BigTextStyle().bigText(big))
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setColor(Color.rgb(255,20,43))
                 .setContentIntent(content)
                 .addAction(new Notification.Action.Builder(
-                        android.R.drawable.ic_media_pause, "PARAR", stopPi).build())
-                .build();
+                        android.R.drawable.ic_menu_view, "CONSOLE", consolePi).build())
+                .addAction(new Notification.Action.Builder(
+                        android.R.drawable.ic_media_pause, "PARAR", stopPi).build());
+
+        if (started > 0) {
+            b.setWhen(started)
+                    .setShowWhen(true)
+                    .setUsesChronometer(true)
+                    .setChronometerCountDown(false);
+        } else {
+            b.setShowWhen(false);
+        }
+        return b.build();
     }
 
     private void updateNotification() {
         if (isRunning(this)) {
-            getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification());
+            getSystemService(NotificationManager.class)
+                    .notify(NOTIFICATION_ID, notification());
         }
     }
 
     private final Runnable notificationTicker = new Runnable() {
         @Override public void run() {
             updateNotification();
-            handler.postDelayed(this, 15000);
+            handler.postDelayed(this, 30000);
         }
     };
 
@@ -259,22 +307,38 @@ public class BdsService extends Service {
         File f = new File(AppPaths.bds(this), "server.properties");
         if (!f.isFile()) return fallback;
         try {
-            byte[] b;
-            try (FileInputStream in = new FileInputStream(f)) { b = in.readAllBytes(); }
-            String text = new String(b, StandardCharsets.UTF_8);
+            String text = readText(f);
             for (String line : text.split("\\R")) {
-                if (line.startsWith(key + "=")) return line.substring(key.length() + 1).trim();
+                if (line.startsWith(key + "="))
+                    return line.substring(key.length() + 1).trim();
             }
         } catch (Exception ignored) {}
         return fallback;
     }
 
+    private String readText(File f) throws Exception {
+        try (FileInputStream in = new FileInputStream(f)) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] b = new byte[8192];
+            int n;
+            while ((n = in.read(b)) >= 0) {
+                if (n > 0) out.write(b,0,n);
+            }
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
     public static String getLocalIpv4() {
         try {
-            for (NetworkInterface nif : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+            for (NetworkInterface nif :
+                    Collections.list(NetworkInterface.getNetworkInterfaces())) {
                 if (!nif.isUp() || nif.isLoopback()) continue;
-                for (java.net.InetAddress addr : Collections.list(nif.getInetAddresses())) {
-                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) return addr.getHostAddress();
+                for (java.net.InetAddress addr :
+                        Collections.list(nif.getInetAddresses())) {
+                    if (addr instanceof Inet4Address
+                            && !addr.isLoopbackAddress()) {
+                        return addr.getHostAddress();
+                    }
                 }
             }
         } catch (Exception ignored) {}
@@ -282,20 +346,22 @@ public class BdsService extends Service {
     }
 
     private static String prettyMode(String mode) {
-        return "creative".equalsIgnoreCase(mode) ? "Criativo" : "Survival";
+        return "creative".equalsIgnoreCase(mode) ? "Criativo" :
+                "adventure".equalsIgnoreCase(mode) ? "Aventura" : "Survival";
     }
 
-    private static String formatDuration(long millis) {
-        long sec = Math.max(0, millis / 1000);
-        long h = sec / 3600;
-        long m = (sec % 3600) / 60;
-        long s = sec % 60;
-        return String.format(Locale.US, "%02d:%02d:%02d", h, m, s);
+    private static String prettyDifficulty(String value) {
+        if ("peaceful".equalsIgnoreCase(value)) return "Pacífico";
+        if ("easy".equalsIgnoreCase(value)) return "Fácil";
+        if ("hard".equalsIgnoreCase(value)) return "Difícil";
+        return "Normal";
     }
 
     @Override public void onDestroy() {
         handler.removeCallbacks(notificationTicker);
-        try { if (process != null && process.isAlive()) process.destroy(); } catch (Exception ignored) {}
+        try {
+            if (process != null && process.isAlive()) process.destroy();
+        } catch (Exception ignored) {}
         releaseWakeLock();
         setState("stopped", 0);
         super.onDestroy();
