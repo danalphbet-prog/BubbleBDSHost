@@ -2,6 +2,7 @@ package com.bubble.bdshost;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -9,6 +10,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,6 +19,7 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -26,6 +29,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -84,6 +88,13 @@ public class MainActivity extends Activity {
 
     // Server summary
     private TextView infoState, infoVersion, infoWorld, infoMode, infoAddress, infoAddons;
+
+    // BDS version manager
+    private TextView bdsVersionSpinner;
+    private PopupWindow bdsUpdateBubble;
+    private volatile boolean bdsVersionChecking = false;
+    private long lastBdsVersionCheckMs = 0L;
+    private BdsVersionManager.Catalog bdsVersionCatalog;
 
     // Console
     private EditText commandInput;
@@ -322,7 +333,11 @@ public class MainActivity extends Activity {
         return v;
     }
 
-    private LinearLayout header() {
+    private LinearLayout header() { return header(false); }
+
+    private LinearLayout homeHeader() { return header(true); }
+
+    private LinearLayout header(boolean showVersionControl) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, 0, 0, dp(10));
@@ -350,6 +365,22 @@ public class MainActivity extends Activity {
         words.addView(sub, match(0,2,0,0));
         row.addView(words, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        if (showVersionControl) {
+            bdsVersionSpinner = tv(versionSpinnerText(), 10.5f, WHITE, Typeface.BOLD);
+            bdsVersionSpinner.setGravity(Gravity.CENTER);
+            bdsVersionSpinner.setPadding(dp(10), dp(8), dp(10), dp(8));
+            bdsVersionSpinner.setBackground(box(
+                    Color.argb(72,30,12,16),
+                    Color.argb(115,255,255,255), 14));
+            bdsVersionSpinner.setClickable(true);
+            bdsVersionSpinner.setFocusable(true);
+            bdsVersionSpinner.setOnClickListener(v -> showBdsVersionModal());
+            LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(
+                    isWide() ? dp(150) : dp(112), dp(46));
+            vp.setMargins(dp(8), 0, 0, 0);
+            row.addView(bdsVersionSpinner, vp);
+        }
 
         return row;
     }
@@ -627,11 +658,12 @@ public class MainActivity extends Activity {
         showTab(currentTab, false);
         updateServerUi();
         refreshServerConsole(true);
+        checkBdsUpdatesInBackground(false);
     }
 
     private View buildHomePage() {
         LinearLayout page = pageRoot();
-        page.addView(header());
+        page.addView(homeHeader());
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -1344,6 +1376,411 @@ public class MainActivity extends Activity {
     }
 
     // -----------------------------------------------------------------
+    // BDS version manager
+    // -----------------------------------------------------------------
+    private String versionSpinnerText() {
+        String version = InstallerManager.readInstalledBdsVersion(this);
+        if (version == null || version.trim().isEmpty()) version = "—";
+        boolean update = bdsVersionCatalog != null
+                && BdsVersionManager.noticeCandidate(this, bdsVersionCatalog) != null;
+        return (update ? "● " : "") + version + "  ▾";
+    }
+
+    private void refreshVersionSpinnerLabel() {
+        if (bdsVersionSpinner == null) return;
+        bdsVersionSpinner.setText(versionSpinnerText());
+        boolean update = bdsVersionCatalog != null
+                && BdsVersionManager.noticeCandidate(this, bdsVersionCatalog) != null;
+        bdsVersionSpinner.setTextColor(update ? Color.rgb(255,238,142) : WHITE);
+    }
+
+    private void checkBdsUpdatesInBackground(boolean force) {
+        if (!ready() || bdsVersionChecking) return;
+        long now = System.currentTimeMillis();
+        if (!force && lastBdsVersionCheckMs > 0
+                && now - lastBdsVersionCheckMs < 15L * 60L * 1000L) return;
+
+        bdsVersionChecking = true;
+        new Thread(() -> {
+            try {
+                BdsVersionManager.Catalog catalog = BdsVersionManager.fetchCatalog(this);
+                handler.post(() -> {
+                    bdsVersionCatalog = catalog;
+                    lastBdsVersionCheckMs = System.currentTimeMillis();
+                    bdsVersionChecking = false;
+                    refreshVersionSpinnerLabel();
+                    BdsVersionManager.VersionInfo candidate =
+                            BdsVersionManager.noticeCandidate(this, catalog);
+                    if (candidate != null) showBdsUpdateBubble(candidate);
+                });
+            } catch (Exception ignored) {
+                handler.post(() -> bdsVersionChecking = false);
+            }
+        }, "bubble-bds-version-check").start();
+    }
+
+    private void showBdsUpdateBubble(BdsVersionManager.VersionInfo candidate) {
+        if (candidate == null || bdsVersionSpinner == null || isFinishing()) return;
+        bdsVersionSpinner.post(() -> {
+            if (bdsUpdateBubble != null) bdsUpdateBubble.dismiss();
+
+            LinearLayout bubble = new LinearLayout(this);
+            bubble.setOrientation(LinearLayout.VERTICAL);
+            bubble.setPadding(dp(14), dp(11), dp(14), dp(11));
+            bubble.setBackground(box(
+                    Color.rgb(37,20,23),
+                    Color.rgb(255,101,119), 16));
+
+            TextView title = tv(
+                    "Nova " + candidate.channelLabel().toLowerCase(Locale.ROOT)
+                            + " disponível",
+                    12.5f, WHITE, Typeface.BOLD);
+            bubble.addView(title);
+            TextView body = tv(
+                    candidate.version + " • toque para gerenciar versões",
+                    10.5f, MUTED, Typeface.NORMAL);
+            body.setPadding(0, dp(3), 0, 0);
+            bubble.addView(body);
+            bubble.setOnClickListener(v -> {
+                if (bdsUpdateBubble != null) bdsUpdateBubble.dismiss();
+                showBdsVersionModal();
+            });
+
+            bdsUpdateBubble = new PopupWindow(
+                    bubble,
+                    isWide() ? dp(330) : dp(270),
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    false);
+            bdsUpdateBubble.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            bdsUpdateBubble.setOutsideTouchable(true);
+            bdsUpdateBubble.setElevation(dp(8));
+            bdsUpdateBubble.showAsDropDown(
+                    bdsVersionSpinner,
+                    isWide() ? -dp(180) : -dp(150),
+                    dp(6));
+            handler.postDelayed(() -> {
+                if (bdsUpdateBubble != null && bdsUpdateBubble.isShowing()) {
+                    bdsUpdateBubble.dismiss();
+                }
+            }, 20_000L);
+        });
+    }
+
+    private void showBdsVersionModal() {
+        if (bdsUpdateBubble != null) bdsUpdateBubble.dismiss();
+
+        Dialog dialog = new Dialog(this);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18), dp(16), dp(18), dp(16));
+        root.setBackground(box(
+                Color.rgb(37,16,21),
+                Color.rgb(112,57,68), 22));
+
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout titleWords = new LinearLayout(this);
+        titleWords.setOrientation(LinearLayout.VERTICAL);
+        titleWords.addView(tv("Versões do servidor", 18, WHITE, Typeface.BOLD));
+        TextView current = tv(
+                "Em uso: " + InstallerManager.readInstalledBdsChannel(this)
+                        + " • " + InstallerManager.readInstalledBdsVersion(this),
+                10.5f, MUTED, Typeface.NORMAL);
+        current.setPadding(0, dp(3), 0, 0);
+        titleWords.addView(current);
+        titleRow.addView(titleWords, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView close = smallButton("×");
+        close.setOnClickListener(v -> dialog.dismiss());
+        titleRow.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        root.addView(titleRow);
+
+        TextView status = tv(
+                "Verificando versões oficiais...",
+                10.5f, MUTED, Typeface.NORMAL);
+        status.setPadding(0, dp(9), 0, dp(8));
+        root.addView(status);
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                isWide() ? dp(480) : dp(390)));
+
+        TextView refresh = tv("↻  Verificar agora", 12.5f, WHITE, Typeface.BOLD);
+        refresh.setGravity(Gravity.CENTER);
+        refresh.setPadding(dp(12), dp(12), dp(12), dp(12));
+        refresh.setBackground(box(
+                Color.rgb(73,31,39),
+                Color.rgb(121,68,78), 14));
+        refresh.setClickable(true);
+        refresh.setOnClickListener(v -> loadBdsVersionCatalogIntoDialog(dialog, list, status, true));
+        root.addView(refresh, match(0, 10, 0, 0));
+
+        dialog.setContentView(root);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams lp = window.getAttributes();
+            lp.dimAmount = .56f;
+            lp.width = isWide() ? dp(620)
+                    : (int)(getResources().getDisplayMetrics().widthPixels * .92f);
+            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            window.setAttributes(lp);
+        }
+
+        BdsVersionManager.Catalog local = bdsVersionCatalog != null
+                ? bdsVersionCatalog : BdsVersionManager.localCatalog(this);
+        renderBdsVersionList(dialog, list, status, local);
+        loadBdsVersionCatalogIntoDialog(dialog, list, status, false);
+    }
+
+    private void loadBdsVersionCatalogIntoDialog(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            boolean force) {
+        if (bdsVersionChecking && !force) return;
+        status.setText("Verificando versões oficiais...");
+        bdsVersionChecking = true;
+        new Thread(() -> {
+            try {
+                BdsVersionManager.Catalog catalog = BdsVersionManager.fetchCatalog(this);
+                handler.post(() -> {
+                    bdsVersionChecking = false;
+                    bdsVersionCatalog = catalog;
+                    lastBdsVersionCheckMs = System.currentTimeMillis();
+                    refreshVersionSpinnerLabel();
+                    if (!dialog.isShowing()) return;
+                    renderBdsVersionList(dialog, list, status, catalog);
+                });
+            } catch (Exception e) {
+                handler.post(() -> {
+                    bdsVersionChecking = false;
+                    if (dialog.isShowing()) {
+                        status.setText("Sem conexão com a lista oficial. Versões baixadas continuam disponíveis.");
+                    }
+                });
+            }
+        }, "bubble-bds-version-modal").start();
+    }
+
+    private void renderBdsVersionList(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            BdsVersionManager.Catalog catalog) {
+        list.removeAllViews();
+        if (catalog == null) catalog = BdsVersionManager.localCatalog(this);
+
+        if (catalog.stable != null || catalog.preview != null) {
+            list.addView(versionSectionTitle("Disponíveis agora"), match(0, 0, 0, 5));
+            if (catalog.stable != null) {
+                list.addView(bdsVersionRow(dialog, list, status, catalog.stable), match(0, 0, 0, 7));
+            }
+            if (catalog.preview != null) {
+                list.addView(bdsVersionRow(dialog, list, status, catalog.preview), match(0, 0, 0, 7));
+            }
+        }
+
+        List<BdsVersionManager.VersionInfo> history = new ArrayList<>();
+        for (BdsVersionManager.VersionInfo info : catalog.all) {
+            if (!info.downloaded) continue;
+            boolean isStableLatest = catalog.stable != null && info.key().equals(catalog.stable.key());
+            boolean isPreviewLatest = catalog.preview != null && info.key().equals(catalog.preview.key());
+            if (!isStableLatest && !isPreviewLatest) history.add(info);
+        }
+        if (!history.isEmpty()) {
+            list.addView(versionSectionTitle("Baixadas"), match(0, 5, 0, 5));
+            for (BdsVersionManager.VersionInfo info : history) {
+                list.addView(bdsVersionRow(dialog, list, status, info), match(0, 0, 0, 7));
+            }
+        }
+
+        if (catalog.all.isEmpty() && catalog.stable == null && catalog.preview == null) {
+            TextView empty = tv(
+                    "Nenhuma versão baixada ainda.",
+                    11, MUTED, Typeface.NORMAL);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(8), dp(24), dp(8), dp(24));
+            list.addView(empty);
+        }
+
+        BdsVersionManager.VersionInfo candidate = BdsVersionManager.noticeCandidate(this, catalog);
+        if (candidate != null) {
+            status.setText("Atualização disponível • "
+                    + candidate.channelLabel() + " " + candidate.version);
+        } else {
+            status.setText("Servidor atualizado. Você também pode baixar uma prévia e alternar quando quiser.");
+        }
+    }
+
+    private TextView versionSectionTitle(String text) {
+        TextView t = tv(text.toUpperCase(Locale.ROOT), 9.5f, MUTED, Typeface.BOLD);
+        t.setAlpha(.86f);
+        return t;
+    }
+
+    private View bdsVersionRow(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            BdsVersionManager.VersionInfo info) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(12), dp(11), dp(10), dp(11));
+        row.setBackground(box(
+                info.installed ? Color.rgb(80,25,34) : Color.rgb(45,28,32),
+                info.installed ? Color.rgb(242,69,91) : Color.rgb(91,72,77), 16));
+
+        LinearLayout words = new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        TextView name = tv(
+                info.channelLabel() + "  " + info.version,
+                13.5f, WHITE, Typeface.BOLD);
+        words.addView(name);
+        String meta;
+        if (info.installed) meta = "Em uso";
+        else if (info.downloaded) meta = "Baixada • pronta para alternar";
+        else if (info.remote) meta = "Disponível para download";
+        else meta = "Histórico local";
+        TextView sub = tv(meta, 9.5f, MUTED, Typeface.NORMAL);
+        sub.setPadding(0, dp(3), 0, 0);
+        words.addView(sub);
+        row.addView(words, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView action;
+        if (info.installed) action = versionMiniButton("EM USO", false);
+        else if (info.downloaded) action = versionMiniButton("USAR", true);
+        else if (info.remote) action = versionMiniButton("BAIXAR", true);
+        else action = versionMiniButton("—", false);
+        row.addView(action, new LinearLayout.LayoutParams(dp(78), dp(42)));
+
+        if (!info.installed && info.downloaded) {
+            TextView trash = versionMiniButton("🗑", true);
+            trash.setTypeface(Typeface.DEFAULT);
+            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(dp(44), dp(42));
+            tp.setMargins(dp(6), 0, 0, 0);
+            row.addView(trash, tp);
+            trash.setOnClickListener(v -> runBdsVersionDelete(dialog, list, status, info));
+        }
+
+        if (!info.installed && (info.downloaded || info.remote)) {
+            action.setOnClickListener(v -> {
+                if (info.downloaded) runBdsVersionActivate(dialog, list, status, info);
+                else runBdsVersionDownload(dialog, list, status, info);
+            });
+        }
+        return row;
+    }
+
+    private TextView versionMiniButton(String text, boolean enabled) {
+        TextView b = tv(text, 9.5f, enabled ? WHITE : MUTED, Typeface.BOLD);
+        b.setGravity(Gravity.CENTER);
+        b.setClickable(enabled);
+        b.setEnabled(enabled);
+        b.setBackground(box(
+                enabled ? Color.rgb(166,24,43) : Color.rgb(53,39,42),
+                enabled ? Color.rgb(242,69,91) : Color.rgb(83,67,72), 12));
+        return b;
+    }
+
+    private void runBdsVersionDownload(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            BdsVersionManager.VersionInfo info) {
+        status.setText("Preparando download de " + info.version + "...");
+        new Thread(() -> {
+            try {
+                BdsVersionManager.download(this, info, (percent, stage) ->
+                        handler.post(() -> {
+                            if (dialog.isShowing()) status.setText(stage + " • " + percent + "%");
+                        }));
+                BdsVersionManager.Catalog fresh = BdsVersionManager.fetchCatalog(this);
+                handler.post(() -> {
+                    bdsVersionCatalog = fresh;
+                    if (dialog.isShowing()) renderBdsVersionList(dialog, list, status, fresh);
+                    Toast.makeText(this, "Versão baixada.", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                handler.post(() -> {
+                    if (dialog.isShowing()) status.setText("Falha no download: " + e.getMessage());
+                    Toast.makeText(this, "Falha ao baixar a versão.", Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "bubble-bds-version-download").start();
+    }
+
+    private void runBdsVersionActivate(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            BdsVersionManager.VersionInfo info) {
+        if (BdsService.isRunning(this)) {
+            Toast.makeText(this, "Pare o servidor antes de alternar a versão.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        status.setText("Alternando para " + info.channelLabel() + " " + info.version + "...");
+        new Thread(() -> {
+            try {
+                BdsVersionManager.activate(this, info, (percent, stage) ->
+                        handler.post(() -> {
+                            if (dialog.isShowing()) status.setText(stage + " • " + percent + "%");
+                        }));
+                BdsVersionManager.Catalog fresh;
+                try { fresh = BdsVersionManager.fetchCatalog(this); }
+                catch (Exception ignored) { fresh = BdsVersionManager.localCatalog(this); }
+                BdsVersionManager.Catalog result = fresh;
+                handler.post(() -> {
+                    bdsVersionCatalog = result;
+                    updateServerUi();
+                    if (dialog.isShowing()) renderBdsVersionList(dialog, list, status, result);
+                    Toast.makeText(this, "Versão do servidor alterada.", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                handler.post(() -> {
+                    if (dialog.isShowing()) status.setText("Falha ao alternar: " + e.getMessage());
+                    Toast.makeText(this, "Não foi possível alternar a versão.", Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "bubble-bds-version-activate").start();
+    }
+
+    private void runBdsVersionDelete(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            BdsVersionManager.VersionInfo info) {
+        new Thread(() -> {
+            try {
+                BdsVersionManager.deleteDownloaded(this, info);
+                BdsVersionManager.Catalog fresh;
+                try { fresh = BdsVersionManager.fetchCatalog(this); }
+                catch (Exception ignored) { fresh = BdsVersionManager.localCatalog(this); }
+                BdsVersionManager.Catalog result = fresh;
+                handler.post(() -> {
+                    bdsVersionCatalog = result;
+                    if (dialog.isShowing()) renderBdsVersionList(dialog, list, status, result);
+                    Toast.makeText(this, "Versão baixada removida.", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                handler.post(() -> {
+                    if (dialog.isShowing()) status.setText("Não foi possível apagar: " + e.getMessage());
+                });
+            }
+        }, "bubble-bds-version-delete").start();
+    }
+
+    // -----------------------------------------------------------------
     // Summary + form state
     // -----------------------------------------------------------------
     private View serverInfoCard() {
@@ -1589,6 +2026,7 @@ public class MainActivity extends Activity {
         infoAddons.setText(
                 "Add-ons ativos: " + countWorldAddons(world)
                         + "   •   Jogadores: " + getProperty("max-players","8"));
+        refreshVersionSpinnerLabel();
     }
 
     private String prettyMode(String mode) {
@@ -1915,6 +2353,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         handler.removeCallbacks(uiTicker);
+        if (bdsUpdateBubble != null) bdsUpdateBubble.dismiss();
         super.onDestroy();
     }
 }
