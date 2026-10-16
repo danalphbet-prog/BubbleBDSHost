@@ -834,7 +834,7 @@ public class MainActivity extends Activity {
     private View switchBlock(Switch sw) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setGravity(Gravity.CENTER_VERTICAL);
-        wrap.setMinHeight(dp(68));
+        wrap.setMinimumHeight(dp(68));
         wrap.setPadding(dp(12),dp(7),dp(8),dp(7));
         wrap.setBackground(box(
                 Color.rgb(39,24,27),

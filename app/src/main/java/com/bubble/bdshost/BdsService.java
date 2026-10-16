@@ -268,7 +268,6 @@ public class BdsService extends Service {
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setSilent(true)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setColor(Color.rgb(255,20,43))

@@ -219,7 +219,6 @@ public class InstallService extends Service {
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setSilent(true)
                 .setCategory(Notification.CATEGORY_PROGRESS)
                 .setShowWhen(false)
                 .setContentIntent(content)
@@ -234,7 +233,6 @@ public class InstallService extends Service {
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setOnlyAlertOnce(true)
-                .setSilent(true)
                 .setAutoCancel(true)
                 .setShowWhen(true)
                 .setContentIntent(PendingIntent.getActivity(
