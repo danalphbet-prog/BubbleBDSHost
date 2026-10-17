@@ -38,6 +38,7 @@ public final class AddonManager {
         public int[] version = new int[]{1, 0, 0};
         public File directory;
         public File iconFile;
+        public long sizeBytes;
         public boolean active;
 
         public String versionLabel() {
@@ -233,6 +234,7 @@ public final class AddonManager {
             info.description = resolveLang(root, header.optString("description", "Sem descrição"));
             info.version = parseVersion(header.optJSONArray("version"));
             info.directory = root;
+            info.sizeBytes = directorySize(root);
             File icon = new File(root, "pack_icon.png");
             if (!icon.isFile()) icon = new File(root, "pack_icon.jpg");
             info.iconFile = icon.isFile() ? icon : null;
@@ -279,6 +281,21 @@ public final class AddonManager {
             }
         } catch (Exception ignored) {}
         return raw;
+    }
+
+    private static long directorySize(File file) {
+        if (file == null || !file.exists()) return 0L;
+        if (file.isFile()) return Math.max(0L, file.length());
+
+        long total = 0L;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                total += directorySize(child);
+                if (total < 0L) return Long.MAX_VALUE;
+            }
+        }
+        return total;
     }
 
     private static String sanitizeWorldName(String worldName) {

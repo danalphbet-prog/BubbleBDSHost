@@ -62,9 +62,11 @@ public class MainActivity extends Activity {
     private static final int TAB_CONSOLE = 2;
     private static final int REQUEST_IMPORT_ADDON = 4106;
 
-    private static final String ADDON_SECTION_ACTIVE = "active";
-    private static final String ADDON_SECTION_EXPLORE = "explore";
-    private static final String ADDON_SECTION_MINE = "mine";
+    private static final String ADDON_FILTER_ALL = "all";
+    private static final String ADDON_FILTER_BEHAVIOR = "behavior";
+    private static final String ADDON_FILTER_RESOURCE = "resource";
+    private static final String ADDON_FILTER_ACTIVE = "active";
+    private static final String ADDON_FILTER_INACTIVE = "inactive";
 
     private final android.os.Handler handler =
             new android.os.Handler(android.os.Looper.getMainLooper());
@@ -115,12 +117,14 @@ public class MainActivity extends Activity {
     private int currentTab = TAB_HOME;
 
     // Add-on manager
-    private LinearLayout addonListContainer;
-    private TextView addonBehaviorTab, addonResourceTab, addonImportButton;
-    private TextView addonActiveSectionTab, addonExploreSectionTab, addonMineSectionTab;
-    private TextView addonStatus, addonWorldLabel, addonLockNotice;
-    private String addonType = AddonManager.TYPE_BEHAVIOR;
-    private String addonSection = ADDON_SECTION_ACTIVE;
+    private LinearLayout addonPageBody, addonListContainer;
+    private EditText addonSearchField, addonExploreSearchField;
+    private TextView addonImportButton, addonExploreButton;
+    private TextView addonStatus, addonWorldLabel, addonLockNotice, addonExplorePlaceholder;
+    private final TextView[] addonFilterTags = new TextView[5];
+    private final List<TextView> addonExploreCategoryViews = new ArrayList<>();
+    private String addonFilter = ADDON_FILTER_ALL;
+    private String addonExploreCategory = "Todos";
     private final List<View> addonActionViews = new ArrayList<>();
 
     // Collapsible category state
@@ -172,8 +176,6 @@ public class MainActivity extends Activity {
                         addonStatus.setText(imported.size() + (imported.size() == 1
                                 ? " pacote importado." : " pacotes importados."));
                     }
-                    addonSection = ADDON_SECTION_MINE;
-                    updateAddonSectionTabs();
                     refreshAddonList();
                     setAddonLocked(BdsService.isRunning(this));
                     Toast.makeText(this, "Add-on importado com sucesso.", Toast.LENGTH_SHORT).show();
@@ -993,156 +995,315 @@ public class MainActivity extends Activity {
         LinearLayout page = pageRoot();
         page.addView(header());
 
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout titleWords = new LinearLayout(this);
-        titleWords.setOrientation(LinearLayout.VERTICAL);
-        titleWords.addView(tv("Addon Bubble", 20, WHITE, Typeface.BOLD));
-        titleWords.addView(tv(
-                "Pacotes do mundo • organização inspirada no Minecraft",
-                10.5f, Color.argb(225,255,236,239), Typeface.NORMAL));
-        titleRow.addView(titleWords, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        page.addView(titleRow, match(0,0,0,8));
+        addonPageBody = new LinearLayout(this);
+        addonPageBody.setOrientation(LinearLayout.VERTICAL);
+        page.addView(addonPageBody, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        addonWorldLabel = tv("", 10.5f, MUTED, Typeface.BOLD);
-        page.addView(addonWorldLabel, match(0,0,0,7));
+        renderAddonLibraryScreen();
+        return page;
+    }
+
+    private void renderAddonLibraryScreen() {
+        if (addonPageBody == null) return;
+        addonPageBody.removeAllViews();
+        addonActionViews.clear();
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout title = new LinearLayout(this);
+        title.setOrientation(LinearLayout.VERTICAL);
+        title.addView(tv("Addon Bubble", 20, WHITE, Typeface.BOLD));
+
+        addonWorldLabel = tv("", 9.8f, Color.argb(225,255,236,239), Typeface.NORMAL);
+        title.addView(addonWorldLabel, match(0,2,0,0));
+        top.addView(title, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        addonExploreButton = addonIconButton("⌕", "Explorar add-ons");
+        addonExploreButton.setOnClickListener(v -> renderAddonExploreScreen());
+        top.addView(addonExploreButton, new LinearLayout.LayoutParams(dp(48),dp(48)));
+
+        addonImportButton = addonIconButton("⇩", "Importar add-on");
+        addonImportButton.setOnClickListener(v -> openAddonPicker());
+        addonActionViews.add(addonImportButton);
+        LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(dp(48),dp(48));
+        importLp.setMargins(dp(7),0,0,0);
+        top.addView(addonImportButton, importLp);
+
+        addonPageBody.addView(top, match(0,0,0,8));
 
         addonLockNotice = tv(
-                "🔒 Servidor ativo • visualização liberada, alterações bloqueadas.",
-                10.5f, WHITE, Typeface.BOLD);
+                "🔒 Servidor ativo • você pode pesquisar e visualizar; alterações ficam bloqueadas.",
+                9.8f, WHITE, Typeface.BOLD);
         addonLockNotice.setGravity(Gravity.CENTER);
-        addonLockNotice.setPadding(dp(12),dp(9),dp(12),dp(9));
+        addonLockNotice.setPadding(dp(11),dp(8),dp(11),dp(8));
         addonLockNotice.setBackground(box(
-                Color.argb(80,20,10,12), Color.argb(90,255,255,255),14));
+                Color.argb(80,20,10,12),
+                Color.argb(90,255,255,255),14));
         addonLockNotice.setVisibility(View.GONE);
-        page.addView(addonLockNotice, match(0,0,0,8));
+        addonPageBody.addView(addonLockNotice, match(0,0,0,7));
 
-        LinearLayout workspace = new LinearLayout(this);
-        workspace.setOrientation(LinearLayout.HORIZONTAL);
-        workspace.setGravity(Gravity.TOP);
+        addonSearchField = field("Pesquisar add-ons...");
+        addonSearchField.setSingleLine(true);
+        addonSearchField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        addonSearchField.setPadding(dp(16),0,dp(16),0);
+        addonSearchField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                refreshAddonList();
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        addonPageBody.addView(addonSearchField, fixedHeight(62,0,0,0,8));
 
-        LinearLayout side = new LinearLayout(this);
-        side.setOrientation(LinearLayout.VERTICAL);
-        side.setPadding(dp(6),dp(6),dp(6),dp(6));
-        side.setBackground(box(
-                Color.rgb(35,20,23), Color.rgb(82,55,61),16));
+        android.widget.HorizontalScrollView tagScroll = new android.widget.HorizontalScrollView(this);
+        tagScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout tags = new LinearLayout(this);
+        tags.setOrientation(LinearLayout.HORIZONTAL);
 
-        addonBehaviorTab = addonSideTab("⚙", "COMPORTAMENTO", true);
-        addonResourceTab = addonSideTab("▦", "TEXTURAS", false);
-        addonBehaviorTab.setOnClickListener(v -> selectAddonType(AddonManager.TYPE_BEHAVIOR));
-        addonResourceTab.setOnClickListener(v -> selectAddonType(AddonManager.TYPE_RESOURCE));
+        String[] tagNames = {"Todos","Comportamentos","Textura","Ativos","Desativados"};
+        String[] tagValues = {
+                ADDON_FILTER_ALL,
+                ADDON_FILTER_BEHAVIOR,
+                ADDON_FILTER_RESOURCE,
+                ADDON_FILTER_ACTIVE,
+                ADDON_FILTER_INACTIVE
+        };
 
-        side.addView(addonBehaviorTab,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(isWide() ? 88 : 82)));
-        LinearLayout.LayoutParams resourceLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(isWide() ? 88 : 82));
-        resourceLp.setMargins(0,dp(7),0,0);
-        side.addView(addonResourceTab, resourceLp);
-
-        int sideWidth = dp(isWide() ? 154 : 108);
-        workspace.addView(side, new LinearLayout.LayoutParams(
-                sideWidth, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(10),0,0,0);
-
-        LinearLayout sections = new LinearLayout(this);
-        sections.setOrientation(LinearLayout.HORIZONTAL);
-
-        addonActiveSectionTab = addonSectionTab("ADDONS\nATIVOS", true);
-        addonExploreSectionTab = addonSectionTab("EXPLORAR", false);
-        addonMineSectionTab = addonSectionTab("MEUS\nADDONS", false);
-
-        addonActiveSectionTab.setOnClickListener(v -> selectAddonSection(ADDON_SECTION_ACTIVE));
-        addonExploreSectionTab.setOnClickListener(v -> selectAddonSection(ADDON_SECTION_EXPLORE));
-        addonMineSectionTab.setOnClickListener(v -> selectAddonSection(ADDON_SECTION_MINE));
-
-        sections.addView(addonActiveSectionTab, new LinearLayout.LayoutParams(0,dp(56),1));
-        LinearLayout.LayoutParams exploreLp = new LinearLayout.LayoutParams(0,dp(56),1);
-        exploreLp.setMargins(dp(5),0,0,0);
-        sections.addView(addonExploreSectionTab, exploreLp);
-        LinearLayout.LayoutParams mineLp = new LinearLayout.LayoutParams(0,dp(56),1);
-        mineLp.setMargins(dp(5),0,0,0);
-        sections.addView(addonMineSectionTab, mineLp);
-        content.addView(sections, match(0,0,0,7));
+        for (int i = 0; i < tagNames.length; i++) {
+            final String value = tagValues[i];
+            addonFilterTags[i] = addonTag(tagNames[i], value.equals(addonFilter));
+            addonFilterTags[i].setOnClickListener(v -> {
+                addonFilter = value;
+                updateAddonFilterTags();
+                refreshAddonList();
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(42));
+            if (i > 0) lp.setMargins(dp(6),0,0,0);
+            tags.addView(addonFilterTags[i], lp);
+        }
+        tagScroll.addView(tags);
+        addonPageBody.addView(tagScroll, match(0,0,0,8));
 
         addonStatus = tv(
-                "Ativos mostra o que está carregado no mundo. Explorar importa arquivos. Meus Addons mostra a biblioteca.",
-                9.2f, MUTED, Typeface.NORMAL);
-        addonStatus.setGravity(Gravity.CENTER);
-        addonStatus.setPadding(dp(6),dp(3),dp(6),dp(7));
-        content.addView(addonStatus);
+                "Biblioteca local de add-ons",
+                9.5f, MUTED, Typeface.NORMAL);
+        addonStatus.setGravity(Gravity.CENTER_VERTICAL);
+        addonPageBody.addView(addonStatus, match(2,0,2,6));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         addonListContainer = new LinearLayout(this);
         addonListContainer.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(addonListContainer);
-        content.addView(scroll, new LinearLayout.LayoutParams(
+        addonPageBody.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        workspace.addView(content, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
-
-        page.addView(workspace, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-
-        updateAddonSideTabs();
-        updateAddonSectionTabs();
         refreshAddonList();
         setAddonLocked(BdsService.isRunning(this));
-        return page;
     }
 
-    private TextView addonSideTab(String glyph, String title, boolean active) {
-        TextView tab = tv(
-                glyph + "\n" + title,
-                isWide() ? 11.5f : 9.2f,
-                active ? WHITE : MUTED,
-                Typeface.BOLD);
-        tab.setGravity(Gravity.CENTER);
-        tab.setClickable(true);
-        tab.setFocusable(true);
-        tab.setPadding(dp(5),dp(7),dp(5),dp(7));
-        styleAddonSideTab(tab, active);
-        return tab;
+    private TextView addonIconButton(String glyph, String description) {
+        TextView button = tv(glyph, 21, WHITE, Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setContentDescription(description);
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setBackground(box(
+                Color.argb(65,28,13,17),
+                Color.argb(120,255,255,255), 13));
+        return button;
     }
 
-    private void styleAddonSideTab(TextView tab, boolean active) {
-        if (tab == null) return;
-        tab.setBackground(box(
-                active ? Color.rgb(153,20,39) : Color.rgb(48,31,35),
-                active ? Color.rgb(255,76,96) : Color.rgb(90,69,75),
-                11));
-        tab.setTextColor(active ? WHITE : MUTED);
-        tab.setAlpha(active ? 1f : .72f);
+    private TextView addonTag(String label, boolean active) {
+        TextView tag = tv(label, 9.7f, active ? WHITE : MUTED, Typeface.BOLD);
+        tag.setGravity(Gravity.CENTER);
+        tag.setPadding(dp(13),0,dp(13),0);
+        tag.setClickable(true);
+        tag.setFocusable(true);
+        styleAddonTag(tag, active);
+        return tag;
     }
 
-    private TextView addonSectionTab(String title, boolean active) {
-        TextView tab = tv(
-                title,
-                isWide() ? 10.5f : 8.4f,
-                active ? WHITE : MUTED,
-                Typeface.BOLD);
-        tab.setGravity(Gravity.CENTER);
-        tab.setClickable(true);
-        tab.setFocusable(true);
-        tab.setPadding(dp(4),dp(5),dp(4),dp(5));
-        styleAddonSectionTab(tab, active);
-        return tab;
+    private void styleAddonTag(TextView tag, boolean active) {
+        if (tag == null) return;
+        tag.setBackground(box(
+                active ? Color.rgb(126,18,35) : Color.rgb(42,27,31),
+                active ? Color.rgb(255,74,95) : Color.rgb(82,62,68), 18));
+        tag.setTextColor(active ? WHITE : MUTED);
+        tag.setAlpha(active ? 1f : .78f);
     }
 
-    private void styleAddonSectionTab(TextView tab, boolean active) {
-        if (tab == null) return;
-        tab.setBackground(box(
-                active ? Color.rgb(112,19,34) : Color.rgb(38,26,29),
-                active ? Color.rgb(255,72,93) : Color.rgb(78,61,66),
-                9));
-        tab.setTextColor(active ? WHITE : MUTED);
-        tab.setAlpha(active ? 1f : .76f);
+    private void updateAddonFilterTags() {
+        String[] values = {
+                ADDON_FILTER_ALL,
+                ADDON_FILTER_BEHAVIOR,
+                ADDON_FILTER_RESOURCE,
+                ADDON_FILTER_ACTIVE,
+                ADDON_FILTER_INACTIVE
+        };
+        for (int i = 0; i < addonFilterTags.length; i++) {
+            styleAddonTag(addonFilterTags[i], values[i].equals(addonFilter));
+        }
+    }
+
+    private void renderAddonExploreScreen() {
+        if (addonPageBody == null) return;
+        addonPageBody.removeAllViews();
+        addonActionViews.clear();
+        addonLockNotice = null;
+        addonImportButton = null;
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView back = addonIconButton("‹", "Voltar para meus add-ons");
+        back.setTextSize(28);
+        back.setOnClickListener(v -> renderAddonLibraryScreen());
+        top.addView(back, new LinearLayout.LayoutParams(dp(48),dp(48)));
+
+        LinearLayout words = new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.setPadding(dp(10),0,0,0);
+        words.addView(tv("Explorar Addons", 19, WHITE, Typeface.BOLD));
+        words.addView(tv(
+                "Descubra novos conteúdos para o seu mundo",
+                9.5f, Color.argb(220,255,236,239), Typeface.NORMAL));
+        top.addView(words, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        addonPageBody.addView(top, match(0,0,0,9));
+
+        addonExploreSearchField = field("Pesquisar no catálogo...");
+        addonExploreSearchField.setSingleLine(true);
+        addonExploreSearchField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        addonExploreSearchField.setPadding(dp(16),0,dp(16),0);
+        addonExploreSearchField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                updateExplorePlaceholder();
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        addonPageBody.addView(addonExploreSearchField, fixedHeight(62,0,0,0,9));
+
+        TextView categoryLabel = tv("CATEGORIAS", 9.2f, WHITE, Typeface.BOLD);
+        categoryLabel.setAlpha(.8f);
+        addonPageBody.addView(categoryLabel, match(2,0,2,6));
+
+        android.widget.HorizontalScrollView categoryScroll =
+                new android.widget.HorizontalScrollView(this);
+        categoryScroll.setHorizontalScrollBarEnabled(false);
+
+        LinearLayout categories = new LinearLayout(this);
+        categories.setOrientation(LinearLayout.HORIZONTAL);
+        addonExploreCategoryViews.clear();
+
+        String[] categoryNames = {
+                "Todos",
+                "Fantasia",
+                "Ficção científica",
+                "Aventura",
+                "Tecnologia",
+                "Sobrevivência",
+                "Utilidades"
+        };
+
+        for (int i = 0; i < categoryNames.length; i++) {
+            final String category = categoryNames[i];
+            TextView chip = addonTag(category, category.equals(addonExploreCategory));
+            chip.setTag(category);
+            chip.setOnClickListener(v -> {
+                addonExploreCategory = category;
+                updateExploreCategories();
+                updateExplorePlaceholder();
+            });
+            addonExploreCategoryViews.add(chip);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(42));
+            if (i > 0) lp.setMargins(dp(6),0,0,0);
+            categories.addView(chip, lp);
+        }
+        categoryScroll.addView(categories);
+        addonPageBody.addView(categoryScroll, match(0,0,0,10));
+
+        LinearLayout filterRow = new LinearLayout(this);
+        filterRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        TextView featured = addonMiniFilter("✦  Em destaque");
+        TextView newest = addonMiniFilter("◷  Recentes");
+        TextView downloads = addonMiniFilter("⇩  Mais baixados");
+
+        filterRow.addView(featured, new LinearLayout.LayoutParams(0,dp(44),1));
+        LinearLayout.LayoutParams fp2 = new LinearLayout.LayoutParams(0,dp(44),1);
+        fp2.setMargins(dp(5),0,0,0);
+        filterRow.addView(newest, fp2);
+        LinearLayout.LayoutParams fp3 = new LinearLayout.LayoutParams(0,dp(44),1);
+        fp3.setMargins(dp(5),0,0,0);
+        filterRow.addView(downloads, fp3);
+
+        addonPageBody.addView(filterRow, match(0,0,0,11));
+
+        ScrollView results = new ScrollView(this);
+        results.setFillViewport(true);
+
+        LinearLayout resultBody = new LinearLayout(this);
+        resultBody.setOrientation(LinearLayout.VERTICAL);
+        resultBody.setGravity(Gravity.CENTER);
+
+        addonExplorePlaceholder = tv("", 11, MUTED, Typeface.NORMAL);
+        addonExplorePlaceholder.setGravity(Gravity.CENTER);
+        addonExplorePlaceholder.setPadding(dp(20),dp(30),dp(20),dp(30));
+        addonExplorePlaceholder.setBackground(box(
+                Color.rgb(42,25,29),
+                Color.rgb(85,61,68),18));
+        resultBody.addView(addonExplorePlaceholder, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        results.addView(resultBody);
+        addonPageBody.addView(results, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,0,1));
+
+        updateExploreCategories();
+        updateExplorePlaceholder();
+    }
+
+    private TextView addonMiniFilter(String label) {
+        TextView filter = tv(label, isWide() ? 9.5f : 8.2f, MUTED, Typeface.BOLD);
+        filter.setGravity(Gravity.CENTER);
+        filter.setBackground(box(
+                Color.rgb(39,26,29),
+                Color.rgb(79,61,66),12));
+        return filter;
+    }
+
+    private void updateExploreCategories() {
+        for (TextView chip : addonExploreCategoryViews) {
+            Object tag = chip.getTag();
+            styleAddonTag(chip,
+                    tag != null && tag.toString().equals(addonExploreCategory));
+        }
+    }
+
+    private void updateExplorePlaceholder() {
+        if (addonExplorePlaceholder == null) return;
+        String query = addonExploreSearchField == null
+                ? "" : addonExploreSearchField.getText().toString().trim();
+
+        StringBuilder message = new StringBuilder();
+        message.append("CATÁLOGO ONLINE\n\n");
+        message.append("Categoria: ").append(addonExploreCategory);
+        if (!query.isEmpty()) {
+            message.append("\nPesquisa: “").append(query).append("”");
+        }
+        message.append("\n\n");
+        message.append("A interface de descoberta já está pronta. ");
+        message.append("Os resultados aparecerão aqui quando o catálogo Firebase Realtime Database for conectado.");
+        addonExplorePlaceholder.setText(message.toString());
     }
 
     private void openAddonPicker() {
@@ -1164,177 +1325,99 @@ public class MainActivity extends Activity {
         return getProperty("level-name", "Meu Mundo Bubble");
     }
 
-    private void selectAddonType(String type) {
-        addonType = AddonManager.TYPE_RESOURCE.equals(type)
-                ? AddonManager.TYPE_RESOURCE : AddonManager.TYPE_BEHAVIOR;
-        updateAddonSideTabs();
-        if (addonStatus != null) {
-            addonStatus.setText(AddonManager.TYPE_RESOURCE.equals(addonType)
-                    ? "Texturas selecionadas."
-                    : "Comportamento selecionado.");
-        }
-        refreshAddonList();
-    }
-
-    private void updateAddonSideTabs() {
-        boolean resource = AddonManager.TYPE_RESOURCE.equals(addonType);
-        styleAddonSideTab(addonBehaviorTab, !resource);
-        styleAddonSideTab(addonResourceTab, resource);
-    }
-
-    private void selectAddonSection(String section) {
-        if (ADDON_SECTION_EXPLORE.equals(section)) addonSection = ADDON_SECTION_EXPLORE;
-        else if (ADDON_SECTION_MINE.equals(section)) addonSection = ADDON_SECTION_MINE;
-        else addonSection = ADDON_SECTION_ACTIVE;
-
-        updateAddonSectionTabs();
-        if (addonStatus != null) {
-            if (ADDON_SECTION_ACTIVE.equals(addonSection)) {
-                addonStatus.setText("Mostrando somente os add-ons ativos neste mundo.");
-            } else if (ADDON_SECTION_EXPLORE.equals(addonSection)) {
-                addonStatus.setText("Importe .mcaddon, .mcpack ou ZIP compatível do dispositivo.");
-            } else {
-                addonStatus.setText("Biblioteca completa de add-ons instalados no host.");
-            }
-        }
-        refreshAddonList();
-    }
-
-    private void updateAddonSectionTabs() {
-        styleAddonSectionTab(addonActiveSectionTab, ADDON_SECTION_ACTIVE.equals(addonSection));
-        styleAddonSectionTab(addonExploreSectionTab, ADDON_SECTION_EXPLORE.equals(addonSection));
-        styleAddonSectionTab(addonMineSectionTab, ADDON_SECTION_MINE.equals(addonSection));
-    }
-
     private void refreshAddonList() {
         if (addonListContainer == null) return;
 
         addonListContainer.removeAllViews();
         addonActionViews.clear();
-        addonImportButton = null;
+        if (addonImportButton != null) addonActionViews.add(addonImportButton);
 
         String world = addonWorldName();
         if (addonWorldLabel != null) addonWorldLabel.setText("Mundo alvo: " + world);
 
         try {
-            List<AddonManager.PackInfo> packs =
-                    AddonManager.listPacks(this, world, addonType);
+            List<AddonManager.PackInfo> packs = new ArrayList<>();
+            packs.addAll(AddonManager.listPacks(
+                    this, world, AddonManager.TYPE_BEHAVIOR));
+            packs.addAll(AddonManager.listPacks(
+                    this, world, AddonManager.TYPE_RESOURCE));
 
-            int activeCount = 0;
-            for (AddonManager.PackInfo pack : packs) {
-                if (pack.active) activeCount++;
-            }
-
-            if (ADDON_SECTION_EXPLORE.equals(addonSection)) {
-                renderAddonExplore(packs.size(), activeCount);
-                setAddonLocked(BdsService.isRunning(this));
-                return;
-            }
+            String query = addonSearchField == null
+                    ? "" : addonSearchField.getText().toString().trim().toLowerCase(Locale.ROOT);
 
             List<AddonManager.PackInfo> visible = new ArrayList<>();
-            if (ADDON_SECTION_ACTIVE.equals(addonSection)) {
-                for (AddonManager.PackInfo pack : packs) {
-                    if (pack.active) visible.add(pack);
+            int activeCount = 0;
+
+            for (AddonManager.PackInfo pack : packs) {
+                if (pack.active) activeCount++;
+
+                boolean typeOk = true;
+                if (ADDON_FILTER_BEHAVIOR.equals(addonFilter)) {
+                    typeOk = AddonManager.TYPE_BEHAVIOR.equals(pack.type);
+                } else if (ADDON_FILTER_RESOURCE.equals(addonFilter)) {
+                    typeOk = AddonManager.TYPE_RESOURCE.equals(pack.type);
+                } else if (ADDON_FILTER_ACTIVE.equals(addonFilter)) {
+                    typeOk = pack.active;
+                } else if (ADDON_FILTER_INACTIVE.equals(addonFilter)) {
+                    typeOk = !pack.active;
                 }
-            } else {
-                visible.addAll(packs);
+
+                String name = pack.name == null ? "" : pack.name.toLowerCase(Locale.ROOT);
+                String description = pack.description == null
+                        ? "" : pack.description.toLowerCase(Locale.ROOT);
+                boolean searchOk = query.isEmpty()
+                        || name.contains(query)
+                        || description.contains(query);
+
+                if (typeOk && searchOk) visible.add(pack);
+            }
+
+            if (addonStatus != null) {
+                addonStatus.setText(
+                        visible.size() + " encontrado" + (visible.size() == 1 ? "" : "s")
+                                + " • " + activeCount + " ativo"
+                                + (activeCount == 1 ? "" : "s"));
             }
 
             if (visible.isEmpty()) {
-                String message;
-                if (ADDON_SECTION_ACTIVE.equals(addonSection)) {
-                    message = AddonManager.TYPE_RESOURCE.equals(addonType)
-                            ? "Nenhum pacote de textura está ativo neste mundo."
-                            : "Nenhum pacote de comportamento está ativo neste mundo.";
-                } else {
-                    message = AddonManager.TYPE_RESOURCE.equals(addonType)
-                            ? "Nenhum pacote de textura na sua biblioteca."
-                            : "Nenhum pacote de comportamento na sua biblioteca.";
-                }
-
-                TextView empty = tv(message, 12, MUTED, Typeface.NORMAL);
+                TextView empty = tv(
+                        query.isEmpty()
+                                ? "Nenhum add-on corresponde a este filtro."
+                                : "Nenhum add-on encontrado para “"
+                                    + addonSearchField.getText().toString().trim() + "”.",
+                        11.5f, MUTED, Typeface.NORMAL);
                 empty.setGravity(Gravity.CENTER);
-                empty.setPadding(dp(14),dp(30),dp(14),dp(30));
-                empty.setBackground(box(CARD,Color.argb(55,255,90,110),18));
+                empty.setPadding(dp(16),dp(30),dp(16),dp(30));
+                empty.setBackground(box(
+                        Color.rgb(42,25,29),
+                        Color.rgb(84,61,68),18));
                 addonListContainer.addView(empty, match(0,0,0,8));
             } else {
                 for (AddonManager.PackInfo pack : visible) {
                     addonListContainer.addView(addonPackCard(pack), match(0,0,0,8));
                 }
             }
-
-            TextView summary = tv(
-                    activeCount + " ativo" + (activeCount == 1 ? "" : "s")
-                            + " • " + packs.size() + " na biblioteca",
-                    9.5f, MUTED, Typeface.BOLD);
-            summary.setGravity(Gravity.CENTER);
-            summary.setPadding(dp(5),dp(4),dp(5),dp(8));
-            addonListContainer.addView(summary);
-
         } catch (Exception e) {
             TextView error = tv(
                     "Falha ao ler add-ons: " + e.getMessage(),
                     11, WHITE, Typeface.NORMAL);
             error.setPadding(dp(12),dp(12),dp(12),dp(12));
-            error.setBackground(box(CARD,Color.argb(80,255,90,110),16));
+            error.setBackground(box(
+                    CARD,Color.argb(80,255,90,110),16));
             addonListContainer.addView(error);
         }
 
         setAddonLocked(BdsService.isRunning(this));
     }
 
-    private void renderAddonExplore(int installedCount, int activeCount) {
-        LinearLayout hero = new LinearLayout(this);
-        hero.setOrientation(LinearLayout.VERTICAL);
-        hero.setPadding(dp(14),dp(16),dp(14),dp(16));
-        hero.setBackground(box(
-                Color.rgb(43,23,28),
-                Color.rgb(110,56,68),
-                18));
-
-        TextView title = tv(
-                AddonManager.TYPE_RESOURCE.equals(addonType)
-                        ? "Explorar pacotes de textura"
-                        : "Explorar pacotes de comportamento",
-                15, WHITE, Typeface.BOLD);
-        hero.addView(title);
-
-        TextView description = tv(
-                "Adicione um arquivo do seu dispositivo. A Bubble identifica o manifest.json, "
-                        + "ícone, nome, versão e tipo automaticamente.",
-                10.5f, MUTED, Typeface.NORMAL);
-        description.setPadding(0,dp(7),0,dp(12));
-        hero.addView(description);
-
-        addonImportButton = mainButton("＋  IMPORTAR ADD-ON");
-        addonImportButton.setOnClickListener(v -> openAddonPicker());
-        addonActionViews.add(addonImportButton);
-        hero.addView(addonImportButton, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
-
-        addonListContainer.addView(hero, match(0,0,0,9));
-
-        LinearLayout info = new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(dp(13),dp(12),dp(13),dp(12));
-        info.setBackground(box(
-                Color.rgb(36,25,28),
-                Color.rgb(75,59,64),
-                15));
-
-        info.addView(tv(
-                "NO DISPOSITIVO",
-                9.2f, Color.rgb(255,118,134), Typeface.BOLD));
-
-        TextView stats = tv(
-                installedCount + " pacote" + (installedCount == 1 ? "" : "s")
-                        + " instalado" + (installedCount == 1 ? "" : "s")
-                        + " • " + activeCount + " ativo" + (activeCount == 1 ? "" : "s"),
-                10.5f, MUTED, Typeface.NORMAL);
-        stats.setPadding(0,dp(5),0,0);
-        info.addView(stats);
-
-        addonListContainer.addView(info, match(0,0,0,8));
+    private String addonSizeLabel(long bytes) {
+        if (bytes < 1024L) return bytes + " B";
+        double kb = bytes / 1024.0;
+        if (kb < 1024.0) return String.format(Locale.getDefault(), "%.1f KB", kb);
+        double mb = kb / 1024.0;
+        if (mb < 1024.0) return String.format(Locale.getDefault(), "%.1f MB", mb);
+        double gb = mb / 1024.0;
+        return String.format(Locale.getDefault(), "%.2f GB", gb);
     }
 
     private View addonPackCard(AddonManager.PackInfo pack) {
@@ -1342,8 +1425,8 @@ public class MainActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(13),dp(12),dp(13),dp(12));
         card.setBackground(box(
-                CARD,
-                pack.active ? Color.rgb(74,220,139) : Color.argb(70,255,90,110),
+                Color.rgb(45,20,25),
+                pack.active ? Color.rgb(255,76,96) : Color.rgb(89,62,69),
                 18));
 
         LinearLayout head = new LinearLayout(this);
@@ -1351,86 +1434,146 @@ public class MainActivity extends Activity {
 
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        icon.setBackground(box(Color.rgb(36,22,25), Color.argb(60,255,255,255),12));
+        icon.setBackground(box(
+                Color.rgb(34,23,26),
+                Color.argb(70,255,255,255),12));
         if (pack.iconFile != null) {
-            try { icon.setImageBitmap(BitmapFactory.decodeFile(pack.iconFile.getAbsolutePath())); }
-            catch (Exception ignored) { icon.setImageResource(R.drawable.bubble_internal_icon); }
+            try {
+                icon.setImageBitmap(BitmapFactory.decodeFile(pack.iconFile.getAbsolutePath()));
+            } catch (Exception ignored) {
+                icon.setImageResource(R.drawable.bubble_internal_icon);
+            }
         } else {
             icon.setImageResource(R.drawable.bubble_internal_icon);
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         }
-        head.addView(icon, new LinearLayout.LayoutParams(dp(58),dp(58)));
+        head.addView(icon, new LinearLayout.LayoutParams(dp(64),dp(64)));
 
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.setPadding(dp(11),0,0,0);
-        TextView name = tv(pack.name, 14, WHITE, Typeface.BOLD);
+
+        TextView name = tv(
+                pack.name == null ? "Add-on" : pack.name,
+                14, WHITE, Typeface.BOLD);
+        name.setMaxLines(2);
         words.addView(name);
+
+        String typeLabel = AddonManager.TYPE_RESOURCE.equals(pack.type)
+                ? "TEXTURA" : "COMPORTAMENTO";
         TextView meta = tv(
-                (pack.active ? "● ATIVO" : "○ DESATIVADO") + "  •  v" + pack.versionLabel(),
-                9.5f, pack.active ? Color.rgb(105,245,166) : MUTED, Typeface.BOLD);
-        meta.setPadding(0,dp(3),0,0);
+                typeLabel + "  •  v" + pack.versionLabel()
+                        + "  •  " + addonSizeLabel(pack.sizeBytes),
+                9.1f,
+                pack.active ? Color.rgb(255,146,159) : MUTED,
+                Typeface.BOLD);
+        meta.setPadding(0,dp(4),0,0);
         words.addView(meta);
-        head.addView(words,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+
+        head.addView(words, new LinearLayout.LayoutParams(
+                0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+
+        TextView state = tv(
+                pack.active ? "ATIVO" : "DESATIVADO",
+                8.8f,
+                WHITE,
+                Typeface.BOLD);
+        state.setGravity(Gravity.CENTER);
+        state.setPadding(dp(8),dp(5),dp(8),dp(5));
+        state.setBackground(box(
+                pack.active ? Color.rgb(116,17,33) : Color.rgb(53,39,43),
+                pack.active ? Color.rgb(255,80,100) : Color.rgb(92,72,78),
+                12));
+        head.addView(state);
+
         card.addView(head);
 
-        TextView desc = tv(pack.description,10.5f,MUTED,Typeface.NORMAL);
+        TextView desc = tv(
+                pack.description == null ? "Sem descrição." : pack.description,
+                10.4f,MUTED,Typeface.NORMAL);
         desc.setMaxLines(3);
-        desc.setPadding(0,dp(9),0,dp(9));
+        desc.setPadding(0,dp(10),0,dp(10));
         card.addView(desc);
 
-        LinearLayout actions = new LinearLayout(this);
-        TextView toggle = smallAction(pack.active ? "Desativar" : "Ativar");
-        toggle.setOnClickListener(v -> changeAddonState(pack, !pack.active));
-        actions.addView(toggle,new LinearLayout.LayoutParams(0,dp(50),1));
-        addonActionViews.add(toggle);
+        TextView install = addonInstallButton(
+                pack.active ? "DESINSTALAR" : "INSTALAR",
+                pack.active);
+        install.setOnClickListener(v -> toggleAddonInstall(pack, install));
+        addonActionViews.add(install);
+        card.addView(install, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
 
-        TextView remove = smallAction("Remover");
-        remove.setOnClickListener(v -> removeAddon(pack));
-        LinearLayout.LayoutParams removeLp = new LinearLayout.LayoutParams(0,dp(50),1);
-        removeLp.setMargins(dp(7),0,0,0);
-        actions.addView(remove,removeLp);
-        addonActionViews.add(remove);
-        card.addView(actions);
         return card;
     }
 
-    private TextView smallAction(String text) {
+    private TextView addonInstallButton(String text, boolean installed) {
         TextView button = tv(text,11.5f,WHITE,Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
         button.setClickable(true);
         button.setFocusable(true);
         button.setBackground(box(
-                Color.rgb(72,24,32), Color.rgb(126,66,76),14));
+                installed ? Color.rgb(68,28,35) : Color.rgb(124,19,37),
+                installed ? Color.rgb(120,78,87) : Color.rgb(255,75,96),
+                14));
         return button;
     }
 
-    private void changeAddonState(AddonManager.PackInfo pack, boolean active) {
+    private void toggleAddonInstall(AddonManager.PackInfo pack, TextView button) {
         if (BdsService.isRunning(this)) {
-            Toast.makeText(this, "Pare o servidor antes de alterar add-ons.", Toast.LENGTH_LONG).show();
+            Toast.makeText(
+                    this,
+                    "Pare o servidor antes de alterar add-ons.",
+                    Toast.LENGTH_LONG).show();
             return;
         }
-        try {
-            AddonManager.setActive(this, addonWorldName(), pack, active);
-            if (addonStatus != null) addonStatus.setText(
-                    pack.name + (active ? " ativado no mundo." : " desativado no mundo."));
-            refreshAddonList();
-        } catch (Exception e) {
-            if (addonStatus != null) addonStatus.setText("Falha: " + e.getMessage());
-        }
-    }
 
-    private void removeAddon(AddonManager.PackInfo pack) {
-        if (BdsService.isRunning(this)) {
-            Toast.makeText(this, "Pare o servidor antes de remover add-ons.", Toast.LENGTH_LONG).show();
-            return;
+        boolean install = !pack.active;
+
+        button.setEnabled(false);
+        button.setAlpha(.76f);
+        button.setText(install ? "INSTALANDO..." : "DESINSTALANDO...");
+        button.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+        button.animate().scaleX(.96f).scaleY(.96f).setDuration(90).withEndAction(() ->
+                button.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+        ).start();
+
+        if (addonStatus != null) {
+            addonStatus.setText(
+                    (install ? "Instalando " : "Desinstalando ")
+                            + (pack.name == null ? "add-on" : pack.name) + "...");
         }
+
         try {
-            AddonManager.removePack(this, addonWorldName(), pack);
-            if (addonStatus != null) addonStatus.setText(pack.name + " removido.");
-            refreshAddonList();
+            AddonManager.setActive(this, addonWorldName(), pack, install);
+            pack.active = install;
+
+            button.setAlpha(1f);
+            button.setText(install ? "✓ INSTALADO" : "✓ DESINSTALADO");
+            button.setBackground(box(
+                    Color.rgb(86,24,36),
+                    Color.rgb(255,99,117),
+                    14));
+
+            if (addonStatus != null) {
+                addonStatus.setText(
+                        (pack.name == null ? "Add-on" : pack.name)
+                                + (install
+                                    ? " foi instalado no mundo."
+                                    : " foi desinstalado do mundo."));
+            }
+
+            handler.postDelayed(this::refreshAddonList, 650);
         } catch (Exception e) {
-            if (addonStatus != null) addonStatus.setText("Falha: " + e.getMessage());
+            button.setEnabled(true);
+            button.setAlpha(1f);
+            button.setText(install ? "INSTALAR" : "DESINSTALAR");
+            if (addonStatus != null) {
+                addonStatus.setText("Falha: " + e.getMessage());
+            }
+            Toast.makeText(
+                    this,
+                    "Não foi possível alterar o add-on.",
+                    Toast.LENGTH_LONG).show();
         }
     }
 
