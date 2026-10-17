@@ -43,7 +43,7 @@ public final class BdsVersionManager {
     };
 
     public interface Progress {
-        default void onProgress(int percent, String stage) {}
+        void onProgress(int percent, String stage);
     }
 
     public static final class VersionInfo {
