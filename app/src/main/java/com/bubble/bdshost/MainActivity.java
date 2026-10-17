@@ -1628,7 +1628,7 @@ public class MainActivity extends Activity {
 
         LinearLayout commandRow = new LinearLayout(this);
         commandRow.setGravity(Gravity.CENTER_VERTICAL);
-        commandInput = field("Digite um comando: list, help, say...");
+        commandInput = field("Comando seguro ou !!op Jogador...");
         commandInput.setTypeface(Typeface.MONOSPACE);
         commandInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
         commandInput.setOnEditorActionListener((v, actionId, event) -> {
@@ -1650,8 +1650,8 @@ public class MainActivity extends Activity {
         page.addView(commandRow,match(0,9,0,0));
 
         TextView allowed = tv(
-                "Permitidos: list • help • say • tell/msg/w • seed",
-                9.5f,MUTED,Typeface.NORMAL);
+                "Seguro: list • help • say • tell/msg/w • seed   |   !! = modo administrador",
+                9.2f,MUTED,Typeface.NORMAL);
         allowed.setGravity(Gravity.CENTER);
         page.addView(allowed,match(0,5,0,0));
 
@@ -2291,14 +2291,43 @@ public class MainActivity extends Activity {
     // -----------------------------------------------------------------
     private void sendSafeCommand() {
         if (commandInput == null) return;
-        String cmd = commandInput.getText().toString().trim();
-        if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
-        if (cmd.isEmpty()) return;
 
-        if (!isAllowedCommand(cmd)) {
-            commandInput.setError("Comando bloqueado pela Bubble");
-            return;
+        String raw = commandInput.getText().toString().trim();
+        if (raw.isEmpty()) return;
+
+        boolean adminMode = raw.startsWith("!!");
+        String cmd;
+
+        if (adminMode) {
+            cmd = raw.substring(2).trim();
+
+            // Aceita !!op Player e também !!/op Player.
+            if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+
+            // Um envio = uma única linha do console.
+            cmd = cmd.replace("\r", "").replace("\n", "").trim();
+
+            if (cmd.isEmpty()) {
+                commandInput.setError("Digite um comando depois de !!");
+                return;
+            }
+
+            if (cmd.length() > 1024) {
+                commandInput.setError("Comando administrativo muito longo");
+                return;
+            }
+        } else {
+            cmd = raw;
+            if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+            if (cmd.isEmpty()) return;
+
+            if (!isAllowedCommand(cmd)) {
+                commandInput.setError(
+                        "Comando protegido. Use !! antes do comando para executar como administrador.");
+                return;
+            }
         }
+
         if (!BdsService.isRunning(this)) {
             commandInput.setError("O servidor não está rodando");
             return;
@@ -2308,8 +2337,16 @@ public class MainActivity extends Activity {
                 .setAction(BdsService.ACTION_COMMAND)
                 .putExtra(BdsService.EXTRA_COMMAND,cmd);
         startService(i);
+
         commandInput.setText("");
         consoleAutoFollow = true;
+
+        if (adminMode) {
+            Toast.makeText(
+                    this,
+                    "Comando administrativo enviado",
+                    Toast.LENGTH_SHORT).show();
+        }
     }
 
     private boolean isAllowedCommand(String cmd) {
