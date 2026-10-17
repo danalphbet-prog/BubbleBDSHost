@@ -77,6 +77,14 @@ public class BdsService extends Service {
 
         new Thread(() -> {
             try {
+                boolean repaired = BdsVersionManager.repairBundledPacksIfNeeded(
+                        this,
+                        (percent, stage) -> appendLog(
+                                "[bubble] " + stage + " (" + percent + "%)\n"));
+                if (repaired) {
+                    appendLog("[bubble] Conteúdo padrão reparado automaticamente.\n");
+                }
+
                 String cmd = "export BOX64_NOBANNER=1 BOX64_LOG=0 " +
                         "BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_STRONGMEM=1; " +
                         "export LD_LIBRARY_PATH=.; exec box64 ./bedrock_server";

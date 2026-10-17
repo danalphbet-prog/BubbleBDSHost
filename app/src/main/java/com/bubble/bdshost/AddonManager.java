@@ -120,6 +120,9 @@ public final class AddonManager {
         if (children != null) {
             for (File child : children) {
                 if (!child.isDirectory()) continue;
+                // Protege os packs internos do BDS (vanilla, chemistry etc.).
+                // Packs importados pela Bubble sempre usam o prefixo bubble_.
+                if (!child.getName().startsWith("bubble_")) continue;
                 PackInfo info = parsePack(child, type);
                 if (info == null) continue;
                 info.active = activeIds.contains(info.uuid.toLowerCase(Locale.ROOT));
@@ -137,6 +140,7 @@ public final class AddonManager {
             throw new IllegalStateException("Pare o servidor antes de alterar add-ons.");
         }
         if (pack == null || pack.uuid == null) throw new IllegalArgumentException("Add-on inválido.");
+        assertBubbleManaged(pack);
         String cleanWorld = sanitizeWorldName(worldName);
         File world = new File(new File(AppPaths.bds(context), "worlds"), cleanWorld);
         if (!world.exists() && !world.mkdirs()) {
@@ -171,8 +175,16 @@ public final class AddonManager {
         if (BdsService.isRunning(context)) {
             throw new IllegalStateException("Pare o servidor antes de remover add-ons.");
         }
+        assertBubbleManaged(pack);
         setActive(context, worldName, pack, false);
-        if (pack != null && pack.directory != null) deleteTree(pack.directory);
+        if (pack.directory != null) deleteTree(pack.directory);
+    }
+
+    private static void assertBubbleManaged(PackInfo pack) {
+        if (pack == null || pack.directory == null
+                || !pack.directory.getName().startsWith("bubble_")) {
+            throw new SecurityException("Pacote interno do servidor protegido.");
+        }
     }
 
     private static File behaviorRoot(Context context) {

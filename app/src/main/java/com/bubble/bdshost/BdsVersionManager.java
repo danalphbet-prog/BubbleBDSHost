@@ -258,6 +258,36 @@ public final class BdsVersionManager {
         if (progress != null) progress.onProgress(100, "Versão ativa: " + info.version);
     }
 
+    public static boolean repairBundledPacksIfNeeded(Context context, Progress progress)
+            throws Exception {
+        File bds = AppPaths.bds(context);
+        File behaviorVanilla = new File(bds, "behavior_packs/vanilla/manifest.json");
+        File resourceVanilla = new File(bds, "resource_packs/vanilla/manifest.json");
+
+        if (behaviorVanilla.isFile() && resourceVanilla.isFile()) return false;
+
+        String version = InstallerManager.readInstalledBdsVersion(context);
+        String channel = installedChannel(context);
+        File archive = findArchive(context, channel, version);
+
+        if (archive == null || !archive.isFile()) {
+            throw new IllegalStateException(
+                    "Conteúdo padrão do servidor está incompleto. Baixe novamente a versão ativa.");
+        }
+
+        if (progress != null) progress.onProgress(10, "Verificando conteúdo padrão");
+        ZipUtils.validateBdsZip(archive);
+        if (progress != null) progress.onProgress(25, "Restaurando conteúdo padrão");
+        ZipUtils.extractBds(archive, bds);
+
+        if (!behaviorVanilla.isFile() || !resourceVanilla.isFile()) {
+            throw new IllegalStateException("Pacote Vanilla não foi restaurado.");
+        }
+
+        if (progress != null) progress.onProgress(100, "Conteúdo padrão restaurado");
+        return true;
+    }
+
     public static void deleteDownloaded(Context context, VersionInfo info) throws Exception {
         if (info == null) return;
         String installed = InstallerManager.readInstalledBdsVersion(context);
