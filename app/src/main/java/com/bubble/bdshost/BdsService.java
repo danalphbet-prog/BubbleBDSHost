@@ -8,6 +8,10 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
+import android.net.Network;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Handler;
@@ -43,6 +47,11 @@ public class BdsService extends Service {
     private Process process;
     private BufferedWriter stdin;
     private PowerManager.WakeLock wakeLock;
+    private ConnectivityManager networkManager;
+    private ConnectivityManager.NetworkCallback networkWatcher;
+    private volatile Network protectedNetwork;
+    private volatile String protectedIpv4 = "";
+    private volatile boolean networkStopRequested;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -71,9 +80,11 @@ public class BdsService extends Service {
         }
 
         long started = System.currentTimeMillis();
+        networkStopRequested = false;
         setState("starting", started);
         startForeground(NOTIFICATION_ID, notification());
         acquireWakeLock();
+        watchNetworkChanges();
 
         new Thread(() -> {
             try {
@@ -85,6 +96,9 @@ public class BdsService extends Service {
                     appendLog("[bubble] Conteúdo padrão reparado automaticamente.\n");
                 }
 
+                if (networkStopRequested) {
+                    throw new InterruptedException("Rede alterada durante a preparação.");
+                }
                 String cmd = "export BOX64_NOBANNER=1 BOX64_LOG=0 " +
                         "BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_STRONGMEM=1; " +
                         "export LD_LIBRARY_PATH=.; exec box64 ./bedrock_server";
@@ -103,11 +117,18 @@ public class BdsService extends Service {
                     appendLog("[bubble] Experimentos padrão conferidos.\n");
                 }
 
+                if (networkStopRequested) {
+                    throw new InterruptedException("Conexão de rede alterada.");
+                }
                 process = RuntimeEngine.start(this, "/root/bds", cmd);
                 stdin = new BufferedWriter(new OutputStreamWriter(
                         process.getOutputStream(), StandardCharsets.UTF_8));
 
-                setState("running", started);
+                if (networkStopRequested) {
+                    stopServerGracefully();
+                } else {
+                    setState("running", started);
+                }
                 appendLog("[bubble] Servidor iniciado.\n");
                 updateNotification();
 
@@ -177,6 +198,88 @@ public class BdsService extends Service {
             throw new IllegalStateException("O mundo não foi gerado corretamente.");
         }
         appendLog("[bubble] Mundo criado; aplicando experimentos padrão...\n");
+    }
+
+    private void watchNetworkChanges() {
+        try {
+            networkManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (networkManager == null) return;
+            protectedNetwork = networkManager.getActiveNetwork();
+            protectedIpv4 = ipv4Of(protectedNetwork);
+            networkWatcher = new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network network) {
+                    Network original = protectedNetwork;
+                    if ((original == null && network != null)
+                            || (original != null && !original.equals(network))) {
+                        requestStopOnNetworkChange("rede principal alterada");
+                    }
+                }
+
+                @Override public void onLost(Network network) {
+                    Network original = protectedNetwork;
+                    if (original != null && original.equals(network)) {
+                        requestStopOnNetworkChange("conexão original perdida");
+                    }
+                }
+
+                @Override public void onLinkPropertiesChanged(
+                        Network network, LinkProperties properties) {
+                    Network original = protectedNetwork;
+                    if (original == null || !original.equals(network)) return;
+                    String now = ipv4Of(properties);
+                    String baseline = protectedIpv4;
+                    if (!baseline.isEmpty() && !now.isEmpty() && !baseline.equals(now)) {
+                        requestStopOnNetworkChange("endereço IP alterado");
+                    }
+                }
+            };
+            networkManager.registerDefaultNetworkCallback(networkWatcher);
+            appendLog("[bubble] Proteção de rede ativada.\n");
+        } catch (Exception e) {
+            appendLog("[bubble] Aviso: proteção de rede indisponível: " + e.getMessage() + "\n");
+            releaseNetworkWatcher();
+        }
+    }
+
+    private String ipv4Of(Network network) {
+        if (networkManager == null || network == null) return "";
+        return ipv4Of(networkManager.getLinkProperties(network));
+    }
+
+    private static String ipv4Of(LinkProperties link) {
+        if (link == null) return "";
+        for (LinkAddress address : link.getLinkAddresses()) {
+            if (address.getAddress() instanceof java.net.Inet4Address) {
+                return address.getAddress().getHostAddress();
+            }
+        }
+        return "";
+    }
+
+    private void requestStopOnNetworkChange(String cause) {
+        if (networkStopRequested) return;
+        networkStopRequested = true;
+        handler.post(() -> {
+            if (!isRunning(this)) return;
+            appendLog("[bubble] Proteção: " + cause + ". Encerrando servidor.\n");
+            if (process == null || !process.isAlive()) {
+                // Ainda está preparando: o worker percebe a flag e encerra.
+                setState("stopping", startedAt(this));
+                updateNotification();
+            } else {
+                stopServerGracefully();
+            }
+        });
+    }
+
+    private void releaseNetworkWatcher() {
+        try {
+            if (networkManager != null && networkWatcher != null) {
+                networkManager.unregisterNetworkCallback(networkWatcher);
+            }
+        } catch (Exception ignored) { }
+        networkWatcher = null;
+        protectedNetwork = null;
     }
 
     private synchronized void sendCommand(String command) {
@@ -421,6 +524,7 @@ public class BdsService extends Service {
     }
 
     @Override public void onDestroy() {
+        releaseNetworkWatcher();
         handler.removeCallbacks(notificationTicker);
         try {
             if (process != null && process.isAlive()) process.destroy();

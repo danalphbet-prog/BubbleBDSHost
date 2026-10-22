@@ -48,11 +48,13 @@ import java.util.Locale;
 public class MainActivity extends Activity {
     public static final String EXTRA_OPEN_TAB = "bubble_open_tab";
 
-    private static final int RED = Color.rgb(255, 20, 43);
+    private static final int RED = Color.rgb(122, 85, 151);
     private static final int WHITE = Color.WHITE;
-    private static final int CARD = Color.rgb(46, 14, 18);
-    private static final int TERMINAL = Color.rgb(14, 13, 15);
-    private static final int MUTED = Color.rgb(210, 198, 202);
+    private static final int CARD = Color.rgb(35, 27, 48);
+    private static final int TERMINAL = Color.rgb(14, 13, 18);
+    private static final int MUTED = Color.rgb(199, 193, 217);
+
+    private android.graphics.Bitmap forestBackground;
 
     private Typeface minecraftRegular;
     private Typeface minecraftBold;
@@ -282,11 +284,12 @@ public class MainActivity extends Activity {
         else buildInstaller();
     }
 
-    private GradientDrawable pageBg() {
-        return gradient(new int[]{
-                Color.rgb(255,34,56),
-                Color.rgb(248,9,38),
-                Color.rgb(220,0,27)}, 0);
+    private android.graphics.drawable.Drawable pageBg() {
+        if (forestBackground == null) {
+            forestBackground = BitmapFactory.decodeResource(
+                    getResources(), R.drawable.bubble_forest_background);
+        }
+        return new BubbleThemeBackground(forestBackground);
     }
 
     private GradientDrawable gradient(int[] colors, float radius) {
@@ -307,8 +310,8 @@ public class MainActivity extends Activity {
     private LinearLayout pageRoot() {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.VERTICAL);
-        int side = isWide() ? 28 : 16;
-        r.setPadding(dp(side), dp(12), dp(side), dp(10));
+        int side = isWide() ? 24 : 12;
+        r.setPadding(dp(side), dp(8), dp(side), dp(7));
         r.setBackground(pageBg());
         return r;
     }
@@ -337,7 +340,7 @@ public class MainActivity extends Activity {
     private TextView tv(String text, float size, int color, int style) {
         TextView v = new TextView(this);
         v.setText(text);
-        v.setTextSize(size);
+        v.setTextSize(size >= 11f ? size * .90f : size);
         v.setTextColor(color);
         applyAppTypeface(v, style);
         return v;
@@ -353,8 +356,14 @@ public class MainActivity extends Activity {
         row.setPadding(0, 0, 0, dp(10));
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.bubble_internal_icon);
+        logo.setImageResource(R.drawable.bubble_app_icon);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        logo.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{
+                .65f, 0f, .15f, 0f, 0f,
+                .38f, .45f, 0f, 0f, 0f,
+                .65f, .15f, .28f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+        }));
         row.addView(logo, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
         LinearLayout words = new LinearLayout(this);
@@ -396,14 +405,14 @@ public class MainActivity extends Activity {
     }
 
     private TextView mainButton(String label) {
-        TextView b = tv(label, 16.5f, WHITE, Typeface.BOLD);
+        TextView b = tv(label, 14f, WHITE, Typeface.BOLD);
         b.setGravity(Gravity.CENTER);
-        b.setMinHeight(dp(60));
-        b.setPadding(dp(14), dp(15), dp(14), dp(15));
+        b.setMinHeight(dp(50));
+        b.setPadding(dp(12), dp(10), dp(12), dp(10));
         b.setBackground(gradient(new int[]{
-                Color.rgb(255,54,76),
-                Color.rgb(255,20,43),
-                Color.rgb(237,18,48)}, 32));
+                Color.rgb(127,90,154),
+                Color.rgb(112,78,139),
+                Color.rgb(95,64,126)}, 32));
         b.setClickable(true);
         b.setFocusable(true);
         return b;
@@ -438,7 +447,13 @@ public class MainActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
 
         ImageView hero = new ImageView(this);
-        hero.setImageResource(R.drawable.bubble_internal_icon);
+        hero.setImageResource(R.drawable.bubble_app_icon);
+        hero.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{
+                .65f, 0f, .15f, 0f, 0f,
+                .38f, .45f, 0f, 0f, 0f,
+                .65f, .15f, .28f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+        }));
         hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(dp(92), dp(92));
         hp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -502,7 +517,7 @@ public class MainActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18),dp(12),dp(18),dp(12));
         panel.setBackground(box(
-                Color.rgb(77,10,20),
+                Color.rgb(47,29,63),
                 Color.argb(90,255,135,150),24));
 
         stageLabel = tv("Processo • aguardando",10.5f,WHITE,Typeface.BOLD);
@@ -521,7 +536,7 @@ public class MainActivity extends Activity {
         versionSelector.setGravity(Gravity.CENTER_VERTICAL);
         versionSelector.setPadding(dp(14),0,dp(14),0);
         versionSelector.setBackground(box(
-                Color.rgb(49,22,27), Color.rgb(115,78,86),14));
+                Color.rgb(39,32,55), Color.rgb(120,91,147),14));
         versionSelector.setOnClickListener(v -> toggleVersionOptions());
         panel.addView(versionSelector, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(62)));
@@ -545,7 +560,7 @@ public class MainActivity extends Activity {
         installButton.setOnClickListener(v -> startInstall());
         panel.addView(installButton, match(0,9,0,0));
 
-        installError = tv("",9.5f,Color.rgb(255,205,211),Typeface.NORMAL);
+        installError = tv("",9.5f,Color.rgb(211,202,225),Typeface.NORMAL);
         installError.setGravity(Gravity.CENTER);
         panel.addView(installError, match(0,5,0,0));
 
@@ -568,7 +583,7 @@ public class MainActivity extends Activity {
         v.setGravity(Gravity.CENTER_VERTICAL);
         v.setPadding(dp(14),0,dp(14),0);
         v.setBackground(box(
-                Color.rgb(55,27,32), Color.rgb(100,69,76),12));
+                Color.rgb(42,34,61), Color.rgb(102,82,128),12));
         v.setMinHeight(dp(60));
         v.setClickable(true);
         return v;
@@ -746,8 +761,8 @@ public class MainActivity extends Activity {
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14),dp(12),dp(14),dp(12));
-        card.setBackground(box(CARD,Color.argb(70,255,90,110),20));
+        card.setPadding(dp(12),dp(9),dp(12),dp(9));
+        card.setBackground(box(CARD,Color.argb(100,123,94,160),20));
 
         LinearLayout head = new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
@@ -795,7 +810,7 @@ public class MainActivity extends Activity {
 
         c.addView(responsivePair(
                 fieldBlock("Nome do mundo", worldName),
-                fieldBlock("Seed", seed)), match(0,0,0,11));
+                fieldBlock("Seed", seed)), match(0,0,0,7));
 
         c.addView(label("Modo de jogo"));
         LinearLayout modes = new LinearLayout(this);
@@ -804,11 +819,11 @@ public class MainActivity extends Activity {
         creative = segment("◇ Criativo", false);
         survival.setOnClickListener(v -> mode(false));
         creative.setOnClickListener(v -> mode(true));
-        modes.addView(survival,new LinearLayout.LayoutParams(0,dp(60),1));
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0,dp(60),1);
+        modes.addView(survival,new LinearLayout.LayoutParams(0,dp(48),1));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0,dp(48),1);
         cp.setMargins(dp(7),0,0,0);
         modes.addView(creative,cp);
-        c.addView(modes, match(0,5,0,11));
+        c.addView(modes, match(0,4,0,7));
 
         c.addView(label("Dificuldade"));
         String[] diffs = {"Pacífico","Fácil","Normal","Difícil"};
@@ -820,11 +835,11 @@ public class MainActivity extends Activity {
             difficultyButtons[i] = segment(diffs[i], "normal".equals(value));
             difficultyButtons[i].setTextSize(isWide() ? 12.5f : 10.5f);
             difficultyButtons[i].setOnClickListener(v -> setDifficulty(value));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(56),1);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(46),1);
             if (i>0) lp.setMargins(dp(5),0,0,0);
             diffRow.addView(difficultyButtons[i],lp);
         }
-        c.addView(diffRow, match(0,5,0,11));
+        c.addView(diffRow, match(0,4,0,7));
 
         cheats = styledSwitch("Cheats", "Permitir comandos no mundo");
         forceGamemode = styledSwitch(
@@ -840,7 +855,7 @@ public class MainActivity extends Activity {
                 10.5f, WHITE, Typeface.BOLD);
         experimentHint.setPadding(dp(12),dp(12),dp(12),dp(12));
         experimentHint.setBackground(box(
-                Color.rgb(66,20,30), Color.rgb(181,49,67), 14));
+                Color.rgb(47,34,65), Color.rgb(115,83,143), 14));
         c.addView(experimentHint, match(0,11,0,3));
         return c;
     }
@@ -853,11 +868,11 @@ public class MainActivity extends Activity {
         serverPort = numericField("19132");
         idleTimeout = numericField("30");
 
-        c.addView(fieldBlock("Nome do servidor", serverName), match(0,0,0,10));
+        c.addView(fieldBlock("Nome do servidor", serverName), match(0,0,0,7));
         c.addView(responsivePair(
                 fieldBlock("Máximo de jogadores", maxPlayers),
-                fieldBlock("Porta", serverPort)), match(0,0,0,10));
-        c.addView(fieldBlock("Timeout AFK (minutos)", idleTimeout), match(0,0,0,10));
+                fieldBlock("Porta", serverPort)), match(0,0,0,7));
+        c.addView(fieldBlock("Timeout AFK (minutos)", idleTimeout), match(0,0,0,7));
 
         allowList = styledSwitch("Lista de acesso", "Somente jogadores autorizados");
         onlineMode = styledSwitch("Validação online", "Validar identidade dos jogadores");
@@ -878,8 +893,8 @@ public class MainActivity extends Activity {
 
         c.addView(responsivePair(
                 fieldBlock("Distância de visão", viewDistance),
-                fieldBlock("Distância de simulação", tickDistance)), match(0,0,0,10));
-        c.addView(fieldBlock("Threads máximas (0 = automático)", maxThreads), match(0,0,0,10));
+                fieldBlock("Distância de simulação", tickDistance)), match(0,0,0,7));
+        c.addView(fieldBlock("Threads máximas (0 = automático)", maxThreads), match(0,0,0,7));
 
         clientChunkGeneration = styledSwitch(
                 "Geração pelo cliente",
@@ -902,16 +917,16 @@ public class MainActivity extends Activity {
             permissionButtons[i] = segment(labels[i], "member".equals(value));
             permissionButtons[i].setTextSize(isWide() ? 12.5f : 11f);
             permissionButtons[i].setOnClickListener(v -> setPermission(value));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(58),1);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,dp(46),1);
             if (i>0) lp.setMargins(dp(5),0,0,0);
             permRow.addView(permissionButtons[i],lp);
         }
-        c.addView(permRow, match(0,5,0,11));
+        c.addView(permRow, match(0,4,0,7));
 
         resourcePackRequired = styledSwitch(
                 "Pacote de recursos obrigatório",
                 "Exigir aceite do pacote para entrar");
-        c.addView(switchBlock(resourcePackRequired), match(0,0,0,8));
+        c.addView(switchBlock(resourcePackRequired), match(0,0,0,6));
 
         TextView addons = tv(
                 "Add-ons ativos são detectados automaticamente no mundo.",
@@ -931,18 +946,18 @@ public class MainActivity extends Activity {
         LinearLayout block = new LinearLayout(this);
         block.setOrientation(LinearLayout.VERTICAL);
         block.addView(label(title));
-        block.addView(field, fixedHeight(76,0,5,0,0));
+        block.addView(field, fixedHeight(52,0,4,0,0));
         return block;
     }
 
     private View switchBlock(Switch sw) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setGravity(Gravity.CENTER_VERTICAL);
-        wrap.setMinimumHeight(dp(68));
+        wrap.setMinimumHeight(dp(54));
         wrap.setPadding(dp(12),dp(7),dp(8),dp(7));
         wrap.setBackground(box(
-                Color.rgb(39,24,27),
-                Color.rgb(87,66,72),14));
+                Color.rgb(35,29,51),
+                Color.rgb(84,72,112),14));
         wrap.addView(sw,new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -953,7 +968,7 @@ public class MainActivity extends Activity {
         Switch sw = new Switch(this);
         sw.setText(title + "\n" + subtitle);
         sw.setTextColor(MUTED);
-        sw.setTextSize(11.5f);
+        sw.setTextSize(10.2f);
         applyAppTypeface(sw, Typeface.NORMAL);
         sw.setGravity(Gravity.CENTER_VERTICAL);
         sw.setPadding(dp(2),0,0,0);
@@ -966,7 +981,7 @@ public class MainActivity extends Activity {
                 new int[][]{
                         new int[]{android.R.attr.state_checked},
                         new int[]{}},
-                new int[]{RED,Color.rgb(92,72,78)}));
+                new int[]{RED,Color.rgb(97,81,124)}));
         return sw;
     }
 
@@ -1138,8 +1153,8 @@ public class MainActivity extends Activity {
     private void styleAddonTag(TextView tag, boolean active) {
         if (tag == null) return;
         tag.setBackground(box(
-                active ? Color.rgb(126,18,35) : Color.rgb(42,27,31),
-                active ? Color.rgb(255,74,95) : Color.rgb(82,62,68), 18));
+                active ? Color.rgb(75,45,103) : Color.rgb(38,32,57),
+                active ? Color.rgb(138,102,176) : Color.rgb(78,67,108), 18));
         tag.setTextColor(active ? WHITE : MUTED);
         tag.setAlpha(active ? 1f : .78f);
     }
@@ -1265,8 +1280,8 @@ public class MainActivity extends Activity {
         addonExplorePlaceholder.setGravity(Gravity.CENTER);
         addonExplorePlaceholder.setPadding(dp(20),dp(30),dp(20),dp(30));
         addonExplorePlaceholder.setBackground(box(
-                Color.rgb(42,25,29),
-                Color.rgb(85,61,68),18));
+                Color.rgb(38,31,55),
+                Color.rgb(82,68,111),18));
         resultBody.addView(addonExplorePlaceholder, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1283,8 +1298,8 @@ public class MainActivity extends Activity {
         TextView filter = tv(label, isWide() ? 9.5f : 8.2f, MUTED, Typeface.BOLD);
         filter.setGravity(Gravity.CENTER);
         filter.setBackground(box(
-                Color.rgb(39,26,29),
-                Color.rgb(79,61,66),12));
+                Color.rgb(36,30,53),
+                Color.rgb(78,68,108),12));
         return filter;
     }
 
@@ -1396,8 +1411,8 @@ public class MainActivity extends Activity {
                 empty.setGravity(Gravity.CENTER);
                 empty.setPadding(dp(16),dp(30),dp(16),dp(30));
                 empty.setBackground(box(
-                        Color.rgb(42,25,29),
-                        Color.rgb(84,61,68),18));
+                        Color.rgb(38,31,55),
+                        Color.rgb(82,70,111),18));
                 addonListContainer.addView(empty, match(0,0,0,8));
             } else {
                 for (AddonManager.PackInfo pack : visible) {
@@ -1410,7 +1425,7 @@ public class MainActivity extends Activity {
                     11, WHITE, Typeface.NORMAL);
             error.setPadding(dp(12),dp(12),dp(12),dp(12));
             error.setBackground(box(
-                    CARD,Color.argb(80,255,90,110),16));
+                    CARD,Color.argb(90,123,94,160),16));
             addonListContainer.addView(error);
         }
 
@@ -1432,8 +1447,8 @@ public class MainActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(13),dp(12),dp(13),dp(12));
         card.setBackground(box(
-                Color.rgb(45,20,25),
-                pack.active ? Color.rgb(255,76,96) : Color.rgb(89,62,69),
+                Color.rgb(39,30,57),
+                pack.active ? Color.rgb(140,101,172) : Color.rgb(86,72,111),
                 18));
 
         LinearLayout head = new LinearLayout(this);
@@ -1442,7 +1457,7 @@ public class MainActivity extends Activity {
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         icon.setBackground(box(
-                Color.rgb(34,23,26),
+                Color.rgb(31,27,47),
                 Color.argb(70,255,255,255),12));
         if (pack.iconFile != null) {
             try {
@@ -1472,7 +1487,7 @@ public class MainActivity extends Activity {
                 typeLabel + "  •  v" + pack.versionLabel()
                         + "  •  " + addonSizeLabel(pack.sizeBytes),
                 9.1f,
-                pack.active ? Color.rgb(255,146,159) : MUTED,
+                pack.active ? Color.rgb(203,175,221) : MUTED,
                 Typeface.BOLD);
         meta.setPadding(0,dp(4),0,0);
         words.addView(meta);
@@ -1488,8 +1503,8 @@ public class MainActivity extends Activity {
         state.setGravity(Gravity.CENTER);
         state.setPadding(dp(8),dp(5),dp(8),dp(5));
         state.setBackground(box(
-                pack.active ? Color.rgb(116,17,33) : Color.rgb(53,39,43),
-                pack.active ? Color.rgb(255,80,100) : Color.rgb(92,72,78),
+                pack.active ? Color.rgb(68,44,94) : Color.rgb(44,37,63),
+                pack.active ? Color.rgb(137,102,177) : Color.rgb(97,81,124),
                 12));
         head.addView(state);
 
@@ -1519,8 +1534,8 @@ public class MainActivity extends Activity {
         button.setClickable(true);
         button.setFocusable(true);
         button.setBackground(box(
-                installed ? Color.rgb(68,28,35) : Color.rgb(124,19,37),
-                installed ? Color.rgb(120,78,87) : Color.rgb(255,75,96),
+                installed ? Color.rgb(53,37,70) : Color.rgb(79,48,110),
+                installed ? Color.rgb(107,85,136) : Color.rgb(137,101,174),
                 14));
         return button;
     }
@@ -1557,8 +1572,8 @@ public class MainActivity extends Activity {
             button.setAlpha(1f);
             button.setText(install ? "✓ INSTALADO" : "✓ DESINSTALADO");
             button.setBackground(box(
-                    Color.rgb(86,24,36),
-                    Color.rgb(255,99,117),
+                    Color.rgb(62,43,86),
+                    Color.rgb(154,118,188),
                     14));
 
             if (addonStatus != null) {
@@ -1623,6 +1638,7 @@ public class MainActivity extends Activity {
         consoleScroll.setBackground(box(TERMINAL,Color.rgb(45,40,43),16));
         consoleText = tv("",10,Color.rgb(235,231,233),Typeface.NORMAL);
         consoleText.setTypeface(Typeface.MONOSPACE);
+        consoleText.setTextSize(10f);
         consoleText.setTextIsSelectable(true);
         consoleText.setPadding(dp(13),dp(12),dp(13),dp(12));
         consoleScroll.addView(consoleText);
@@ -1637,6 +1653,7 @@ public class MainActivity extends Activity {
         commandRow.setGravity(Gravity.CENTER_VERTICAL);
         commandInput = field("Comando seguro ou !!op Jogador...");
         commandInput.setTypeface(Typeface.MONOSPACE);
+        commandInput.setTextSize(12.5f);
         commandInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
         commandInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
@@ -1675,8 +1692,8 @@ public class MainActivity extends Activity {
         bar.setGravity(Gravity.CENTER);
         bar.setPadding(dp(8),dp(6),dp(8),dp(6));
         bar.setBackground(box(
-                Color.rgb(38,12,17),
-                Color.argb(110,255,82,103),22));
+                Color.rgb(28,23,42),
+                Color.argb(110,123,94,160),22));
 
         navHome = navItem("⌂\nInício");
         navAddons = navItem("◇\nAddon Bubble");
@@ -1716,20 +1733,20 @@ public class MainActivity extends Activity {
 
         if (navHome != null) {
             navHome.setBackground(box(
-                    tab == TAB_HOME ? Color.rgb(169,21,42) : Color.TRANSPARENT,
-                    tab == TAB_HOME ? Color.rgb(255,70,91) : Color.TRANSPARENT,16));
+                    tab == TAB_HOME ? Color.rgb(93,55,112) : Color.TRANSPARENT,
+                    tab == TAB_HOME ? Color.rgb(129,96,169) : Color.TRANSPARENT,16));
             navHome.setAlpha(tab == TAB_HOME ? 1f : .68f);
         }
         if (navAddons != null) {
             navAddons.setBackground(box(
-                    tab == TAB_ADDONS ? Color.rgb(169,21,42) : Color.TRANSPARENT,
-                    tab == TAB_ADDONS ? Color.rgb(255,70,91) : Color.TRANSPARENT,16));
+                    tab == TAB_ADDONS ? Color.rgb(93,55,112) : Color.TRANSPARENT,
+                    tab == TAB_ADDONS ? Color.rgb(129,96,169) : Color.TRANSPARENT,16));
             navAddons.setAlpha(tab == TAB_ADDONS ? 1f : .68f);
         }
         if (navConsole != null) {
             navConsole.setBackground(box(
-                    tab == TAB_CONSOLE ? Color.rgb(169,21,42) : Color.TRANSPARENT,
-                    tab == TAB_CONSOLE ? Color.rgb(255,70,91) : Color.TRANSPARENT,16));
+                    tab == TAB_CONSOLE ? Color.rgb(93,55,112) : Color.TRANSPARENT,
+                    tab == TAB_CONSOLE ? Color.rgb(129,96,169) : Color.TRANSPARENT,16));
             navConsole.setAlpha(tab == TAB_CONSOLE ? 1f : .68f);
         }
 
@@ -1798,8 +1815,8 @@ public class MainActivity extends Activity {
             bubble.setOrientation(LinearLayout.VERTICAL);
             bubble.setPadding(dp(14), dp(11), dp(14), dp(11));
             bubble.setBackground(box(
-                    Color.rgb(37,20,23),
-                    Color.rgb(255,101,119), 16));
+                    Color.rgb(33,28,49),
+                    Color.rgb(169,135,198), 16));
 
             TextView title = tv(
                     "Nova " + candidate.channelLabel().toLowerCase(Locale.ROOT)
@@ -1844,8 +1861,8 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(16), dp(18), dp(16));
         root.setBackground(box(
-                Color.rgb(37,16,21),
-                Color.rgb(112,57,68), 22));
+                Color.rgb(32,25,49),
+                Color.rgb(96,70,129), 22));
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1884,8 +1901,8 @@ public class MainActivity extends Activity {
         refresh.setGravity(Gravity.CENTER);
         refresh.setPadding(dp(12), dp(12), dp(12), dp(12));
         refresh.setBackground(box(
-                Color.rgb(73,31,39),
-                Color.rgb(121,68,78), 14));
+                Color.rgb(52,41,76),
+                Color.rgb(116,84,141), 14));
         refresh.setClickable(true);
         refresh.setOnClickListener(v -> loadBdsVersionCatalogIntoDialog(dialog, list, status, true));
         root.addView(refresh, match(0, 10, 0, 0));
@@ -2007,8 +2024,8 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12), dp(11), dp(10), dp(11));
         row.setBackground(box(
-                info.installed ? Color.rgb(80,25,34) : Color.rgb(45,28,32),
-                info.installed ? Color.rgb(242,69,91) : Color.rgb(91,72,77), 16));
+                info.installed ? Color.rgb(55,38,81) : Color.rgb(40,33,58),
+                info.installed ? Color.rgb(137,95,170) : Color.rgb(96,79,121), 16));
 
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
@@ -2058,8 +2075,8 @@ public class MainActivity extends Activity {
         b.setClickable(enabled);
         b.setEnabled(enabled);
         b.setBackground(box(
-                enabled ? Color.rgb(166,24,43) : Color.rgb(53,39,42),
-                enabled ? Color.rgb(242,69,91) : Color.rgb(83,67,72), 12));
+                enabled ? Color.rgb(90,55,109) : Color.rgb(44,38,65),
+                enabled ? Color.rgb(137,95,170) : Color.rgb(83,73,114), 12));
         return b;
     }
 
@@ -2157,7 +2174,7 @@ public class MainActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(15),dp(14),dp(15),dp(14));
-        card.setBackground(box(CARD,Color.argb(70,255,90,110),20));
+        card.setBackground(box(CARD,Color.argb(100,123,94,160),20));
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -2195,13 +2212,13 @@ public class MainActivity extends Activity {
         e.setTextColor(WHITE);
         e.setHintTextColor(Color.rgb(150,138,143));
         e.setHint(hint);
-        e.setTextSize(13.5f);
+        e.setTextSize(11.5f);
         applyAppTypeface(e, Typeface.NORMAL);
-        e.setMinHeight(dp(76));
-        e.setPadding(dp(16),dp(8),dp(16),dp(8));
+        e.setMinHeight(dp(52));
+        e.setPadding(dp(12),dp(5),dp(12),dp(5));
         e.setBackground(box(
-                Color.rgb(39,24,27),
-                Color.rgb(111,90,96),14));
+                Color.rgb(35,29,51),
+                Color.rgb(113,96,143),14));
         return e;
     }
 
@@ -2216,8 +2233,8 @@ public class MainActivity extends Activity {
         b.setGravity(Gravity.CENTER);
         b.setClickable(true);
         b.setBackground(box(
-                active ? Color.rgb(175,22,43) : Color.rgb(45,28,32),
-                active ? Color.rgb(255,68,89) : Color.rgb(91,72,77),14));
+                active ? Color.rgb(95,57,119) : Color.rgb(40,33,58),
+                active ? Color.rgb(132,96,169) : Color.rgb(96,79,121),14));
         return b;
     }
 
@@ -2225,11 +2242,11 @@ public class MainActivity extends Activity {
         creativeMode = creativeValue;
         if (survival == null || creative == null) return;
         survival.setBackground(box(
-                creativeValue ? Color.rgb(45,28,32) : Color.rgb(175,22,43),
-                creativeValue ? Color.rgb(91,72,77) : Color.rgb(255,68,89),14));
+                creativeValue ? Color.rgb(40,33,58) : Color.rgb(95,57,119),
+                creativeValue ? Color.rgb(96,79,121) : Color.rgb(132,96,169),14));
         creative.setBackground(box(
-                creativeValue ? Color.rgb(175,22,43) : Color.rgb(45,28,32),
-                creativeValue ? Color.rgb(255,68,89) : Color.rgb(91,72,77),14));
+                creativeValue ? Color.rgb(95,57,119) : Color.rgb(40,33,58),
+                creativeValue ? Color.rgb(132,96,169) : Color.rgb(96,79,121),14));
         survival.setTextColor(creativeValue ? MUTED : WHITE);
         creative.setTextColor(creativeValue ? WHITE : MUTED);
     }
@@ -2241,8 +2258,8 @@ public class MainActivity extends Activity {
             if (difficultyButtons[i] == null) continue;
             boolean active = values[i].equals(value);
             difficultyButtons[i].setBackground(box(
-                    active ? Color.rgb(175,22,43) : Color.rgb(45,28,32),
-                    active ? Color.rgb(255,68,89) : Color.rgb(91,72,77),14));
+                    active ? Color.rgb(95,57,119) : Color.rgb(40,33,58),
+                    active ? Color.rgb(132,96,169) : Color.rgb(96,79,121),14));
             difficultyButtons[i].setTextColor(active ? WHITE : MUTED);
         }
     }
@@ -2254,8 +2271,8 @@ public class MainActivity extends Activity {
             if (permissionButtons[i] == null) continue;
             boolean active = values[i].equals(value);
             permissionButtons[i].setBackground(box(
-                    active ? Color.rgb(175,22,43) : Color.rgb(45,28,32),
-                    active ? Color.rgb(255,68,89) : Color.rgb(91,72,77),14));
+                    active ? Color.rgb(95,57,119) : Color.rgb(40,33,58),
+                    active ? Color.rgb(132,96,169) : Color.rgb(96,79,121),14));
             permissionButtons[i].setTextColor(active ? WHITE : MUTED);
         }
     }
@@ -2421,7 +2438,7 @@ public class MainActivity extends Activity {
         infoState.setText(running
                 ? "● " + server + " • Online"
                 : "● " + server + " • Pronto");
-        infoState.setTextColor(running ? Color.rgb(89,246,158) : WHITE);
+        infoState.setTextColor(running ? Color.rgb(164,215,180) : WHITE);
         infoVersion.setText(
                 InstallerManager.readInstalledBdsChannel(this)
                         + " • " + InstallerManager.readInstalledBdsVersion(this));
