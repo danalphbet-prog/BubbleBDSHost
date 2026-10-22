@@ -216,9 +216,11 @@ public final class MascotOverlayService extends Service {
             removePanel();
             removeSatellite();
             expanded = false;
+            mascotModeChanged(false);
             return;
         }
         expanded = true;
+        mascotModeChanged(true);
         satellite = new TextView(this);
         satellite.setText("▤⚙");
         satellite.setTextColor(Color.WHITE);
@@ -239,6 +241,14 @@ public final class MascotOverlayService extends Service {
             satellite.animate().scaleX(1f).scaleY(1f).alpha(1f)
                     .setDuration(230).start();
         } catch (RuntimeException ignored) { satellite = null; }
+    }
+
+    /** Requests a mood transition; the HTML queues it until the current animation finishes. */
+    private void mascotModeChanged(boolean opened) {
+        if (mascot != null) {
+            mascot.evaluateJavascript(
+                    "window.bubbleModeChanged && window.bubbleModeChanged(" + opened + ")", null);
+        }
     }
 
     private void positionExtras() {

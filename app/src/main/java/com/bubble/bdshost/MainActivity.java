@@ -88,6 +88,14 @@ public class MainActivity extends Activity {
     private Switch cheats, forceGamemode, allowList, onlineMode;
     private Switch resourcePackRequired, clientChunkGeneration;
     private TextView survival, creative, serverButton, minecraftLaunchButton, mascotToggleButton;
+    private LinearLayout consolePanelBody;
+    private TextView consolePanelArrow;
+    private boolean consoleExpanded = false;
+    private boolean introShowing = false;
+    private boolean minecraftHintShowing = false;
+    private long lastMinecraftHintSession = 0L;
+    private android.app.Dialog introDialog;
+    private android.app.Dialog minecraftHintDialog;
     private boolean formCollapsed = false;
     private boolean pendingMascotTouch = false;
     private float lastMascotTouchX, lastMascotTouchY;
@@ -358,8 +366,11 @@ public class MainActivity extends Activity {
     private void handleIntent(Intent intent, boolean showNow) {
         if (intent == null) return;
         if ("console".equalsIgnoreCase(intent.getStringExtra(EXTRA_OPEN_TAB))) {
-            currentTab = TAB_CONSOLE;
-            if (showNow && ready()) showTab(TAB_CONSOLE, false);
+            currentTab = TAB_HOME;
+            if (showNow && ready()) {
+                showTab(TAB_HOME, false);
+                setConsoleExpanded(true);
+            }
         } else if ("addons".equalsIgnoreCase(intent.getStringExtra(EXTRA_OPEN_TAB))) {
             currentTab = TAB_ADDONS;
             if (showNow && ready()) showTab(TAB_ADDONS, false);
@@ -812,15 +823,12 @@ public class MainActivity extends Activity {
         dashboardContent = new FrameLayout(this);
         homePage = buildHomePage();
         addonPage = buildAddonPage();
-        consolePage = buildConsolePage();
+        consolePage = null;
 
         dashboardContent.addView(homePage, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         dashboardContent.addView(addonPage, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
-        dashboardContent.addView(consolePage, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -831,9 +839,12 @@ public class MainActivity extends Activity {
         setContentView(shell);
         loadConfig();
         showTab(currentTab, false);
+        if ("console".equalsIgnoreCase(getIntent().getStringExtra(EXTRA_OPEN_TAB)))
+            setConsoleExpanded(true);
         updateServerUi();
         refreshServerConsole(true);
         checkBdsUpdatesInBackground(false);
+        handler.postDelayed(this::maybeShowBubbleIntroduction, 3000L);
     }
 
     private View buildHomePage() {
@@ -892,13 +903,23 @@ public class MainActivity extends Activity {
                 3), match(0,0,0,10));
 
         content.addView(configurationArea);
+        content.addView(buildInlineConsole(), match(0,1,0,9));
 
         serverButton = mainButton("▶  Iniciar Servidor");
         serverButton.setOnClickListener(v -> toggleServer());
         content.addView(serverButton, match(0,0,0,8));
 
-        minecraftLaunchButton = mainButton("▣  Abrir Minecraft");
-        minecraftLaunchButton.setOnClickListener(v -> openMinecraft());
+        minecraftLaunchButton = mainButton("▣  Entrar no Minecraft");
+        minecraftLaunchButton.setTextSize(14.5f);
+        minecraftLaunchButton.setMinHeight(dp(68));
+        minecraftLaunchButton.setPadding(dp(12),dp(18),dp(12),dp(18));
+        minecraftLaunchButton.setBackground(gradient(new int[]{
+                Color.rgb(201,34,65), Color.rgb(169,21,51), Color.rgb(128,19,46)}, 16));
+        minecraftLaunchButton.setOnClickListener(v -> {
+            if (minecraftHintDialog != null && minecraftHintDialog.isShowing())
+                minecraftHintDialog.dismiss();
+            openMinecraft();
+        });
         minecraftLaunchButton.setVisibility(View.GONE);
         content.addView(minecraftLaunchButton, match(0,0,0,8));
 
@@ -1772,111 +1793,122 @@ public class MainActivity extends Activity {
         if (addonLockNotice != null) addonLockNotice.setVisibility(locked ? View.VISIBLE : View.GONE);
     }
 
-    private View buildConsolePage() {
-        LinearLayout page = pageRoot();
-        page.setPadding(dp(isWide()?28:14),dp(12),dp(isWide()?28:14),dp(10));
+    private View buildInlineConsole() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(10),dp(10),dp(10),dp(10));
+        card.setBackground(box(CARD,Color.rgb(111,89,137),14));
 
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-
-        LinearLayout title = new LinearLayout(this);
-        title.setOrientation(LinearLayout.VERTICAL);
-        title.addView(tv("Console do Servidor",20,WHITE,Typeface.BOLD));
-        title.addView(tv(
-                "Log em tempo real • comandos seguros",
-                10.5f,Color.argb(225,255,236,239),Typeface.NORMAL));
-        top.addView(title,new LinearLayout.LayoutParams(
+        LinearLayout headerRow = new LinearLayout(this);
+        headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView caption = tv("⌁  CONSOLE",12.8f,WHITE,Typeface.BOLD);
+        headerRow.addView(caption,new LinearLayout.LayoutParams(
                 0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        TextView badge = tv("LOG",9,MUTED,Typeface.BOLD);
+        badge.setPadding(dp(8),dp(4),dp(8),dp(4));
+        headerRow.addView(badge);
+        consolePanelArrow = tv("＋",21,WHITE,Typeface.BOLD);
+        consolePanelArrow.setGravity(Gravity.CENTER);
+        headerRow.addView(consolePanelArrow,new LinearLayout.LayoutParams(dp(45),dp(42)));
+        headerRow.setClickable(true);
+        headerRow.setOnClickListener(v -> setConsoleExpanded(!consoleExpanded));
+        card.addView(headerRow);
 
-        TextView stateBadge = tv("LIVE",10,WHITE,Typeface.BOLD);
-        stateBadge.setGravity(Gravity.CENTER);
-        stateBadge.setBackground(box(
-                Color.argb(65,255,255,255),
-                Color.argb(80,255,255,255),12));
-        top.addView(stateBadge,new LinearLayout.LayoutParams(dp(58),dp(36)));
-        page.addView(top,match(0,0,0,9));
+        consolePanelBody = new LinearLayout(this);
+        consolePanelBody.setOrientation(LinearLayout.VERTICAL);
 
         consoleScroll = new ScrollView(this);
         consoleScroll.setFillViewport(true);
-        consoleScroll.setBackground(box(TERMINAL,Color.rgb(45,40,43),16));
-        consoleText = tv("",10,Color.rgb(235,231,233),Typeface.NORMAL);
+        consoleScroll.setBackground(box(TERMINAL,Color.rgb(68,58,81),10));
+        consoleText = tv("",9.7f,Color.rgb(235,231,233),Typeface.NORMAL);
         consoleText.setTypeface(Typeface.MONOSPACE);
-        consoleText.setTextSize(10f);
         consoleText.setTextIsSelectable(true);
-        consoleText.setPadding(dp(13),dp(12),dp(13),dp(12));
+        consoleText.setPadding(dp(10),dp(10),dp(10),dp(10));
         consoleScroll.addView(consoleText);
-        consoleScroll.setOnScrollChangeListener((v, sx, sy, osx, osy) -> {
-            int contentHeight = consoleText == null ? 0 : consoleText.getHeight();
-            consoleAutoFollow = sy + consoleScroll.getHeight() >= contentHeight - dp(48);
+        consoleScroll.setOnScrollChangeListener((v,sx,sy,osx,osy) -> {
+            int height = consoleText == null ? 0 : consoleText.getHeight();
+            consoleAutoFollow = sy + consoleScroll.getHeight() >= height - dp(48);
         });
-        page.addView(consoleScroll,new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,0,1));
+        consolePanelBody.addView(consoleScroll,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(isWide()?300:215)));
 
-        LinearLayout commandRow = new LinearLayout(this);
-        commandRow.setGravity(Gravity.CENTER_VERTICAL);
-        commandInput = field("Comando seguro ou !!op Jogador...");
+        LinearLayout inputRow = new LinearLayout(this);
+        inputRow.setGravity(Gravity.CENTER_VERTICAL);
+        commandInput = field("Comando ou !!op Jogador...");
         commandInput.setTypeface(Typeface.MONOSPACE);
-        commandInput.setTextSize(12.5f);
+        commandInput.setTextSize(11f);
         commandInput.setImeOptions(EditorInfo.IME_ACTION_SEND);
-        commandInput.setOnEditorActionListener((v, actionId, event) -> {
+        commandInput.setOnEditorActionListener((v,actionId,event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendSafeCommand();
                 return true;
             }
             return false;
         });
-        commandRow.addView(commandInput,new LinearLayout.LayoutParams(
-                0,dp(76),1));
-
-        TextView send = smallButton("›");
-        send.setTextSize(24);
+        inputRow.addView(commandInput,new LinearLayout.LayoutParams(0,dp(52),1));
+        TextView send=smallButton("›");
+        send.setTextSize(23);
         send.setOnClickListener(v -> sendSafeCommand());
-        LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(dp(76),dp(76));
-        sendLp.setMargins(dp(8),0,0,0);
-        commandRow.addView(send,sendLp);
-        page.addView(commandRow,match(0,9,0,0));
+        LinearLayout.LayoutParams sendLp=new LinearLayout.LayoutParams(dp(54),dp(52));
+        sendLp.setMargins(dp(7),0,0,0);
+        inputRow.addView(send,sendLp);
+        consolePanelBody.addView(inputRow,match(0,8,0,0));
 
-        TextView allowed = tv(
-                "Seguro: list • help • say • tell/msg/w • seed   |   !! = modo administrador",
-                9.2f,MUTED,Typeface.NORMAL);
-        allowed.setGravity(Gravity.CENTER);
-        page.addView(allowed,match(0,5,0,0));
+        TextView explain=tv("Seguro: list, help, say, msg, seed   •   !! = administrador",
+                8.8f,MUTED,Typeface.NORMAL);
+        explain.setGravity(Gravity.CENTER);
+        consolePanelBody.addView(explain,match(0,5,0,1));
+        consolePanelBody.setVisibility(consoleExpanded?View.VISIBLE:View.GONE);
+        consolePanelArrow.setText(consoleExpanded?"−":"＋");
+        card.addView(consolePanelBody);
+        return card;
+    }
 
-        return page;
+    private void setConsoleExpanded(boolean expanded) {
+        consoleExpanded=expanded;
+        if (consolePanelBody==null) return;
+        consolePanelBody.animate().cancel();
+        if (consolePanelArrow!=null) consolePanelArrow.setText(expanded?"−":"＋");
+        if (expanded) {
+            consolePanelBody.setVisibility(View.VISIBLE);
+            consolePanelBody.setAlpha(0f);
+            consolePanelBody.setTranslationY(-dp(7));
+            consolePanelBody.animate().alpha(1f).translationY(0f)
+                    .setDuration(260).setInterpolator(
+                            new android.view.animation.DecelerateInterpolator()).start();
+            refreshServerConsole(true);
+        } else {
+            consolePanelBody.animate().alpha(0f).translationY(-dp(6))
+                    .setDuration(190).withEndAction(() -> {
+                        if(!consoleExpanded && consolePanelBody!=null)
+                            consolePanelBody.setVisibility(View.GONE);
+                    }).start();
+        }
     }
 
     private View buildBottomNavigation() {
-        LinearLayout outer = new LinearLayout(this);
+        LinearLayout outer=new LinearLayout(this);
         outer.setGravity(Gravity.CENTER);
         outer.setPadding(dp(10),dp(6),dp(10),dp(6));
-
-        LinearLayout bar = new LinearLayout(this);
+        LinearLayout bar=new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
         bar.setPadding(dp(8),dp(6),dp(8),dp(6));
-        bar.setBackground(box(
-                Color.rgb(28,23,42),
-                Color.argb(110,123,94,160),22));
-
-        navHome = navItem("⌂\nInício");
-        navAddons = navItem("◇\nAddon Bubble");
-        navConsole = navItem(">_\nConsole");
-
-        navHome.setOnClickListener(v -> showTab(TAB_HOME, true));
-        navAddons.setOnClickListener(v -> showTab(TAB_ADDONS, true));
-        navConsole.setOnClickListener(v -> showTab(TAB_CONSOLE, true));
-
-        LinearLayout.LayoutParams one = new LinearLayout.LayoutParams(0,dp(62),1);
+        bar.setBackground(box(Color.rgb(38,27,47),
+                Color.argb(100,156,125,190),20));
+        navHome=navItem("⌂\nInício");
+        navAddons=navItem("◇\nAddon Bubble");
+        navConsole=null;
+        navHome.setOnClickListener(v -> showTab(TAB_HOME,true));
+        navAddons.setOnClickListener(v -> showTab(TAB_ADDONS,true));
+        LinearLayout.LayoutParams one=new LinearLayout.LayoutParams(0,dp(59),1);
         bar.addView(navHome,one);
-        LinearLayout.LayoutParams two = new LinearLayout.LayoutParams(0,dp(62),1);
-        two.setMargins(dp(6),0,0,0);
+        LinearLayout.LayoutParams two=new LinearLayout.LayoutParams(0,dp(59),1);
+        two.setMargins(dp(7),0,0,0);
         bar.addView(navAddons,two);
-        LinearLayout.LayoutParams three = new LinearLayout.LayoutParams(0,dp(62),1);
-        three.setMargins(dp(6),0,0,0);
-        bar.addView(navConsole,three);
-
-        int maxWidth = isWide() ? dp(620) : ViewGroup.LayoutParams.MATCH_PARENT;
-        outer.addView(bar,new LinearLayout.LayoutParams(maxWidth,ViewGroup.LayoutParams.WRAP_CONTENT));
+        outer.addView(bar,new LinearLayout.LayoutParams(
+                isWide()?dp(470):ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         return outer;
     }
 
@@ -1889,40 +1921,23 @@ public class MainActivity extends Activity {
     }
 
     private void showTab(int tab, boolean userAction) {
-        currentTab = tab;
-        if (homePage != null) homePage.setVisibility(tab == TAB_HOME ? View.VISIBLE : View.GONE);
-        if (addonPage != null) addonPage.setVisibility(tab == TAB_ADDONS ? View.VISIBLE : View.GONE);
-        if (consolePage != null) consolePage.setVisibility(tab == TAB_CONSOLE ? View.VISIBLE : View.GONE);
-
-        if (navHome != null) {
-            navHome.setBackground(box(
-                    tab == TAB_HOME ? Color.rgb(93,55,112) : Color.TRANSPARENT,
-                    tab == TAB_HOME ? Color.rgb(129,96,169) : Color.TRANSPARENT,16));
-            navHome.setAlpha(tab == TAB_HOME ? 1f : .68f);
+        currentTab = tab == TAB_ADDONS ? TAB_ADDONS : TAB_HOME;
+        if (homePage!=null) homePage.setVisibility(currentTab==TAB_HOME?View.VISIBLE:View.GONE);
+        if (addonPage!=null) addonPage.setVisibility(currentTab==TAB_ADDONS?View.VISIBLE:View.GONE);
+        if (navHome!=null) {
+            boolean active=currentTab==TAB_HOME;
+            navHome.setBackground(box(active?Color.rgb(93,55,112):Color.TRANSPARENT,
+                    active?Color.rgb(129,96,169):Color.TRANSPARENT,16));
+            navHome.setAlpha(active?1f:.68f);
         }
-        if (navAddons != null) {
-            navAddons.setBackground(box(
-                    tab == TAB_ADDONS ? Color.rgb(93,55,112) : Color.TRANSPARENT,
-                    tab == TAB_ADDONS ? Color.rgb(129,96,169) : Color.TRANSPARENT,16));
-            navAddons.setAlpha(tab == TAB_ADDONS ? 1f : .68f);
+        if (navAddons!=null) {
+            boolean active=currentTab==TAB_ADDONS;
+            navAddons.setBackground(box(active?Color.rgb(93,55,112):Color.TRANSPARENT,
+                    active?Color.rgb(129,96,169):Color.TRANSPARENT,16));
+            navAddons.setAlpha(active?1f:.68f);
         }
-        if (navConsole != null) {
-            navConsole.setBackground(box(
-                    tab == TAB_CONSOLE ? Color.rgb(93,55,112) : Color.TRANSPARENT,
-                    tab == TAB_CONSOLE ? Color.rgb(129,96,169) : Color.TRANSPARENT,16));
-            navConsole.setAlpha(tab == TAB_CONSOLE ? 1f : .68f);
-        }
-
-        if (tab == TAB_ADDONS) {
-            refreshAddonList();
-        }
-        if (tab == TAB_CONSOLE) {
-            refreshServerConsole(true);
-            if (userAction) {
-                consoleAutoFollow = true;
-                scrollConsoleWithoutFocus();
-            }
-        }
+        if (currentTab==TAB_ADDONS) refreshAddonList();
+        if (currentTab==TAB_HOME && consoleExpanded) refreshServerConsole(true);
     }
 
     // -----------------------------------------------------------------
@@ -2533,6 +2548,152 @@ public class MainActivity extends Activity {
                 || lower.startsWith("w ");
     }
 
+    // Tutorial único após preparação completa do ambiente.
+    private final String[] introTitles={
+        "Oi! Eu sou a Bubble 🫧", "Seu mundo começa aqui", "Hora de ligar o mundo",
+        "Addon Bubble", "Uma porta para outros mundos", "Sua pequena companheira",
+        "Nossa próxima aventura"
+    };
+    private final String[] introMessages={
+        "Vou acompanhar suas aventuras com expressões e algumas surpresas! "
+        + "Ainda estou em desenvolvimento e aprendendo a ser sua assistente.",
+        "Na aba Início, abra Mundo, escreva o nome que quiser e escolha modo, "
+        + "dificuldade e outras regras. Seu mundo será seu ponto de partida.",
+        "Na mesma aba, toque em Iniciar Servidor. Quando estiver online, "
+        + "o formulário se recolhe e aparece Entrar no Minecraft!",
+        "Aqui você importa e ativa add-ons de comportamento e textura. "
+        + "As mudanças devem ser feitas enquanto o servidor estiver parado.",
+        "Mais adiante, pretendemos conectar mundos por Bolhas, com chat compartilhado, "
+        + "cidades e dungeons. Esses recursos ainda não estão disponíveis.",
+        "Posso ficar flutuando, reagir com expressões e mostrar informações básicas "
+        + "do servidor. Toque em mim para abrir o painel. Ainda não converso por IA.",
+        "Futuramente quero reconhecer eventos, dar dicas, trocar mensagens e "
+        + "ajudar na exploração. Por enquanto, começamos juntos! Seu mundo é só o começo."
+    };
+
+    private void maybeShowBubbleIntroduction() {
+        if (!ready() || isFinishing() || isDestroyed() || introShowing) return;
+        if (getSharedPreferences("bubble_intro",MODE_PRIVATE)
+                .getBoolean("completed",false)) return;
+        if (!getWindow().getDecorView().hasWindowFocus()) {
+            handler.postDelayed(this::maybeShowBubbleIntroduction, 1500);
+            return;
+        }
+        introShowing=true;
+        showTab(TAB_HOME,false);
+        showBubbleIntroStep(0);
+    }
+
+    private android.graphics.drawable.Drawable pixelSpeechBackground() {
+        return new BubblePixelBalloonDrawable(this);
+    }
+
+    private void showBubbleIntroStep(int step) {
+        if (introDialog!=null) introDialog.dismiss();
+        if (step>=introTitles.length) {
+            finishBubbleIntro();
+            return;
+        }
+        android.app.Dialog dialog=new android.app.Dialog(this);
+        introDialog=dialog;
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(17),dp(16),dp(17),dp(15));
+        root.setBackground(pixelSpeechBackground());
+        LinearLayout head=new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView mascotIcon=new ImageView(this);
+        mascotIcon.setImageResource(R.drawable.bubble_pixel_splash);
+        mascotIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        head.addView(mascotIcon,new LinearLayout.LayoutParams(dp(52),dp(52)));
+        TextView title=tv(introTitles[step],13.3f,WHITE,Typeface.BOLD);
+        title.setPadding(dp(8),0,0,0);
+        head.addView(title,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        root.addView(head);
+        TextView content=tv(introMessages[step],11.4f,MUTED,Typeface.NORMAL);
+        content.setPadding(0,dp(11),0,dp(14));
+        root.addView(content);
+        TextView progress=tv("APRESENTAÇÃO  "+(step+1)+" / "+introTitles.length,
+                9,Color.rgb(171,148,196),Typeface.BOLD);
+        root.addView(progress);
+        LinearLayout actions=new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        TextView skip=smallButton("PULAR");
+        skip.setTextSize(10);
+        skip.setOnClickListener(v->{ dialog.dismiss();finishBubbleIntro(); });
+        actions.addView(skip,new LinearLayout.LayoutParams(dp(85),dp(45)));
+        TextView next=smallButton(step==introTitles.length-1?"COMEÇAR  ✓":"PRÓXIMO  ›");
+        next.setBackground(box(Color.rgb(94,57,126),Color.rgb(169,132,209),9));
+        next.setTextSize(10.5f);
+        next.setOnClickListener(v->{dialog.dismiss();showBubbleIntroStep(step+1);});
+        LinearLayout.LayoutParams nextLp=new LinearLayout.LayoutParams(0,dp(45),1);
+        nextLp.setMargins(dp(7),0,0,0);
+        actions.addView(next,nextLp);
+        root.addView(actions,match(0,12,0,0));
+        dialog.setContentView(root);
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.show();
+        styleSpeechWindow(dialog,.30f,.91f);
+    }
+
+    private void finishBubbleIntro() {
+        introShowing=false;
+        if (introDialog!=null && introDialog.isShowing()) introDialog.dismiss();
+        introDialog=null;
+        getSharedPreferences("bubble_intro",MODE_PRIVATE).edit()
+                .putBoolean("completed",true).apply();
+        if (BdsService.state(this).equals("running"))
+            handler.postDelayed(this::maybeSuggestEnteringMinecraft,600);
+    }
+
+    private void styleSpeechWindow(android.app.Dialog dialog,float dim,float widthRatio) {
+        Window w=dialog.getWindow();
+        if (w==null) return;
+        w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        WindowManager.LayoutParams lp=w.getAttributes();
+        lp.dimAmount=dim;
+        lp.width=isWide()?dp(420):(int)(getResources().getDisplayMetrics().widthPixels*widthRatio);
+        lp.height=ViewGroup.LayoutParams.WRAP_CONTENT;
+        w.setAttributes(lp);
+        w.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+    }
+
+    // Balão pontual; visível por até cinco segundos ou até o próximo toque.
+    private void maybeSuggestEnteringMinecraft() {
+        if (!"running".equals(BdsService.state(this)) || introShowing || minecraftHintShowing
+                || currentTab!=TAB_HOME || isFinishing() || isDestroyed()) return;
+        if (!getSharedPreferences("bubble_intro",MODE_PRIVATE)
+                .getBoolean("completed",false)) return;
+        long session=BdsService.startedAt(this);
+        if (session<=0 || session==lastMinecraftHintSession) return;
+        lastMinecraftHintSession=session;
+        minecraftHintShowing=true;
+        android.app.Dialog dialog=new android.app.Dialog(this);
+        minecraftHintDialog=dialog;
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(14),dp(12),dp(14),dp(12));
+        root.setBackground(pixelSpeechBackground());
+        TextView content=tv("🫧 Tudo pronto! Seu mundo está online. Vamos entrar no Minecraft?",
+                12,WHITE,Typeface.BOLD);
+        root.addView(content);
+        TextView enter=mainButton("▣  ENTRAR NO MINECRAFT");
+        enter.setTextSize(12);
+        enter.setBackground(box(Color.rgb(175,26,54),Color.rgb(231,91,111),9));
+        enter.setOnClickListener(v->{dialog.dismiss();openMinecraft();});
+        root.addView(enter,match(0,12,0,0));
+        dialog.setContentView(root);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.setOnDismissListener(d->minecraftHintShowing=false);
+        dialog.show();
+        styleSpeechWindow(dialog,.24f,.82f);
+        handler.postDelayed(()->{
+            if (minecraftHintDialog==dialog && dialog.isShowing())dialog.dismiss();
+        },5000L);
+    }
+
     private void toggleServer() {
         if (BdsService.isRunning(this)) {
             startService(new Intent(this,BdsService.class)
@@ -2598,8 +2759,23 @@ public class MainActivity extends Activity {
         setConfigurationLocked(running);
         animateConfiguration("running".equals(state) || "stopping".equals(state));
         if (minecraftLaunchButton != null) {
-            minecraftLaunchButton.setVisibility("running".equals(state)
-                    ? View.VISIBLE : View.GONE);
+            boolean online = "running".equals(state);
+            if (online && minecraftLaunchButton.getVisibility() != View.VISIBLE) {
+                minecraftLaunchButton.setVisibility(View.VISIBLE);
+                android.view.animation.ScaleAnimation pulse =
+                    new android.view.animation.ScaleAnimation(1f,1.065f,1f,1.065f,
+                        android.view.animation.Animation.RELATIVE_TO_SELF,.5f,
+                        android.view.animation.Animation.RELATIVE_TO_SELF,.5f);
+                pulse.setDuration(950);
+                pulse.setRepeatMode(android.view.animation.Animation.REVERSE);
+                pulse.setRepeatCount(android.view.animation.Animation.INFINITE);
+                pulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+                minecraftLaunchButton.startAnimation(pulse);
+            } else if (!online) {
+                minecraftLaunchButton.clearAnimation();
+                minecraftLaunchButton.setVisibility(View.GONE);
+            }
+            if (online) maybeSuggestEnteringMinecraft();
         }
 
         if ("stopping".equals(state)) {
@@ -2970,6 +3146,8 @@ public class MainActivity extends Activity {
     @Override protected void onDestroy() {
         handler.removeCallbacks(uiTicker);
         handler.removeCallbacks(mascotTouchSampler);
+        if (introDialog != null) introDialog.dismiss();
+        if (minecraftHintDialog != null) minecraftHintDialog.dismiss();
         if (bdsUpdateBubble != null) bdsUpdateBubble.dismiss();
         super.onDestroy();
     }

@@ -17,6 +17,12 @@ small{opacity:.65;padding:0 16px;text-align:center}
 html,body{margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:transparent!important;display:block!important}
 canvas{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;min-height:0!important;margin:0!important;aspect-ratio:1!important;image-rendering:pixelated!important;pointer-events:none!important}
 .g,small{display:none!important}
+</style><style>
+/* Janela de sobreposição: somente o canvas, sem botões, moldura ou fundo. */
+html,body{background:transparent!important;overflow:hidden!important}
+canvas{width:100vw!important;height:100vw!important;max-width:100vw!important;
+       margin:0!important;image-rendering:pixelated!important;flex:none!important}
+.g,small{display:none!important}
 </style></head><body>
 <canvas id="c" width="112" height="112" role="img" aria-label="Bolha, mascote em pixel art"></canvas>
 <small>Bolha 64×64 · olhos 16×16 · boca 32×16 — toque e arraste em qualquer lugar</small>
@@ -85,7 +91,7 @@ function showCat(){[...g.children].forEach(b=>{const m=MC.includes(b.dataset.n);
 function mv(e){const r=$('c').getBoundingClientRect(),u=r.width*.3;pt={x:(e.clientX-r.left-r.width/2)/u,y:(e.clientY-r.top-r.height/2)/u};ptT=performance.now()}
 addEventListener('pointerdown',e=>{if(e.target.closest('.g'))return;down=true;mv(e);sqv+=.1});
 addEventListener('pointermove',e=>{if(down||e.pointerType==='mouse')mv(e)});
-addEventListener('pointerup',()=>{down=false;ptT=performance.now()-2000});
+addEventListener('pointerup',()=>{down=false;ptT=performance.now()});
 addEventListener('pointercancel',()=>{down=false});
 /* sprites */
 const SPR={"wooden":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#372910","b":"#866526","c":"#755821","d":"#6b511f","e":"#493615","f":"#684e1e","g":"#20180a","h":"#896727","i":"#281e0b"}},"stone":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#494949","b":"#9a9a9a","c":"#898989","d":"#7f7f7f","e":"#493615","f":"#684e1e","g":"#181818","h":"#896727","i":"#281e0b"}},"copper":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#5e2b1c","b":"#f99780","c":"#e0806b","d":"#d36c47","e":"#483515","f":"#674d1e","g":"#411c11","h":"#876627","i":"#271e0b"}},"iron":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#444444","b":"#ffffff","c":"#d8d8d8","d":"#c1c1c1","e":"#493615","f":"#684e1e","g":"#181818","h":"#896727","i":"#281e0b"}},"golden":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#805c16","b":"#fafc75","c":"#e7eb56","d":"#e6af15","e":"#483515","f":"#674d1e","g":"#3e2d0e","h":"#876627","i":"#271e0b"}},"diamond":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#0e3e35","b":"#32e8c9","c":"#2ac5aa","d":"#27b098","e":"#483515","f":"#674d1e","g":"#082520","h":"#876627","i":"#271e0b"}},"netherite":{"r":["................","................","......aaaaa.....",".....abbbcdaae..","......afffgdhf..","..........egdf..",".........eifgdf.","........ehf.fcf.",".......eif..fbf.","......ehf...fbf.",".....ejf....fbf.","....ekf......f..","...ejf..........","..ehf...........","..ff............","................"],"p":{"a":"#49283f","b":"#847a84","c":"#6f666f","d":"#5c555c","e":"#2e2122","f":"#231012","g":"#4e3b3d","h":"#724442","i":"#5f3331","j":"#3a383a","k":"#423f42"}}};
@@ -665,6 +671,9 @@ function ctool(bx,by,dt){
    else CP.push({x,y,vx:(Math.random()-.5)*14,vy:-8-Math.random()*14,l:0,L:.7,c:NC[Math.random()*4|0],z:2,g:-8})}}
  if(C.vn&&u>=C.vn)gl(VEIN,bx+46,by+4+(Math.sin(tt*12)>0?0:2),'#ff3b3b');
  CP=CP.filter(p=>{p.l+=dt;p.vy+=(p.g==null?90:p.g)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.l<p.L){px(p.x,p.y,p.c,1-p.l/p.L,p.z||2,p.z||2);return true}return false})}
+let bubbleAnimationEpoch=performance.now()/1000;
+let originalSet=set;
+set=function(name,man){bubbleAnimationEpoch=performance.now()/1000;return originalSet(name,man)};
 let last=performance.now();set('feliz');showCat();let fl=1;
 function loop(now){
   if(window.bubbleLastFrame && now-window.bubbleLastFrame<32){requestAnimationFrame(loop);return}
@@ -684,7 +693,7 @@ function loop(now){
  if(talk)tg.mo=Math.max(T.mo,(Math.sin(t*13)*.5+.5)*(.5+.4*Math.sin(t*3.1)));
  const cs=Math.sin(t*9),ss=Math.sin(t*4.5);
  if(cur==='mastigando'){tg.mo=.06+(cs*.5+.5)*.5;tg.mw=12+cs*2.5;tg.mx=ss*4*(1-gz)+pxx*2.5*gz;tg.msk=ss*2.5*(1-gz);tg.tilt+=ss*3*(1-gz);tg.ly+=cs*.07}
- if(TOOLS[cur]){const Tl=TOOLS[cur],sp=Tl.sp;mu=(t%Tl.c)/Tl.c;if(rs){lastMu=mu;gone=false;hits=0;brk=0;PART.length=0;rs=0}if(mu<lastMu){gone=false;if(sp)hits=0}
+ if(TOOLS[cur]){const Tl=TOOLS[cur],sp=Tl.sp;mu=((t-bubbleAnimationEpoch)%Tl.c)/Tl.c;if(rs){lastMu=mu;gone=false;hits=0;brk=0;PART.length=0;rs=0}if(mu<lastMu){gone=false;if(sp)hits=0}
   for(const h of(sp?[.62,.7,.78]:[.66]))if(lastMu<h&&mu>=h)hit();
   if(sp&&lastMu<.5&&mu>=.5){sqv+=.14;for(let i=0;i<12;i++)PART.push({x:GBX+68,y:GBY+36,vx:(Math.random()*2-1)*28,vy:-Math.random()*30,l:0,c:Tl.sc[i%Tl.sc.length]})}
   lastMu=mu;const u=mu;tg.lx=.5+pxx*.5;tg.bl=0;
@@ -695,7 +704,7 @@ function loop(now){
   else if(u<.85){tg.ch=1;tg.mw=22;tg.ms=1;tg.mo=1;tg.bl=1;tg.tilt=6}
   else{tg.arc=1;tg.mw=24;tg.ms=1;tg.mo=1.1;tg.bl=1;tg.tilt=8;tg.tr=.5;if(Math.random()<.08)sqv+=.04}
  }
- if(SWORDS[cur]){const Sw=SWORDS[cur],n=cur;mu=(t%Sw.c)/Sw.c;if(rs){lastMu=mu;PART.length=0;rs=0}const u=mu,wr=u<lastMu;
+ if(SWORDS[cur]){const Sw=SWORDS[cur],n=cur;mu=((t-bubbleAnimationEpoch)%Sw.c)/Sw.c;if(rs){lastMu=mu;PART.length=0;rs=0}const u=mu,wr=u<lastMu;
   if(n==='espada de madeira'&&lastMu<.52&&u>=.52){sqv+=.12;burst(GBX+90,GBY+62,['#ffffff','#e8d9b0'],6,26)}
   if(n==='espada de pedra'&&wr){sqv+=.16;burst(GBX+72,GBY+80,['#8e8e8e','#aaaaaa','#707070'],8,22)}
   if(Sw.sp&&lastMu<.34&&u>=.34){sqv+=.14;burst(GBX+66,GBY+36,Sw.sc,12,30)}
@@ -715,12 +724,12 @@ function loop(now){
    else if(n==='espada de netherite'&&u>=.56&&u<.97){Object.assign(tg,E.espanto);tg.ly=-.5;tg.lx=.9;tg.es=1.3}
    else{Object.assign(tg,E.maroto);tg.lx=.4+Math.sin(u*60)*.5}}
  }
- if(CT[cur]){const C=CT[cur];mu=(t%C.c)/C.c;if(rs){lastMu=mu;ST={h:0};CP=[];rs=0}if(mu<lastMu){ST={h:0};lastMu=-1}
+ if(CT[cur]){const C=CT[cur];mu=((t-bubbleAnimationEpoch)%C.c)/C.c;if(rs){lastMu=mu;ST={h:0};CP=[];rs=0}if(mu<lastMu){ST={h:0};lastMu=-1}
   for(const[eu,ty,ex,ey]of C.V||[])if(lastMu<eu&&mu>=eu)EV(ty,ex,ey,C);
   lastMu=mu;let f=C.F[0][1];for(const[fu,fn]of C.F)if(mu>=fu)f=fn;
   tg.lx=.5+pxx*.5;tg.bl=0;Object.assign(tg,E[f]||EF[f]);
   for(const[a,b,x,y]of C.L||[])if(mu>=a&&mu<b){tg.lx=x;tg.ly=y}}
- if(cur==='bocejando'){const u=(t%4.8)/4.8,e=x=>x*x*(3-2*x),v=u<.1?0:u<.35?e((u-.1)/.25):u<.62?1-.1*(u-.35)/.27:u<.85?e(1-(u-.62)/.23)*.9:0;tg.mo=1.15*v;tg.mw=10+v*2;tg.ms=0;tg.lo=tg.ro=1-.92*v;tg.ly=T.ly*(1-gz)+pyy-.35*v*(1-gz);tg.tilt=T.tilt*(1-gz)-5*v*(1-gz)}
+ if(cur==='bocejando'){const u=((t-bubbleAnimationEpoch)%4.8)/4.8,e=x=>x*x*(3-2*x),v=u<.1?0:u<.35?e((u-.1)/.25):u<.62?1-.1*(u-.35)/.27:u<.85?e(1-(u-.62)/.23)*.9:0;tg.mo=1.15*v;tg.mw=10+v*2;tg.ms=0;tg.lo=tg.ro=1-.92*v;tg.ly=T.ly*(1-gz)+pyy-.35*v*(1-gz);tg.tilt=T.tilt*(1-gz)-5*v*(1-gz)}
  if(cur==='boca fechada'){tg.mo=0;tg.mw=11+cs*1.5;tg.ms=.6+.2*cs;tg.mx=ss*5*(1-gz)+pxx*2.5*gz;tg.msk=ss*3*(1-gz);tg.tilt+=ss*3*(1-gz);tg.ly+=cs*.07}
  cb+=((cur==='mastigando'||cur==='boca fechada'?(cs*.5+.5)*.4+.15:0)-cb)*Math.min(1,dt*14);
  for(const k in K){const[st,d]=K[k];const a=(tg[k]-S[k])*st;V[k]+=a*dt;V[k]*=Math.pow(d,dt*10);S[k]+=V[k]*dt}
@@ -753,4 +762,66 @@ function loop(now){
  requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
 window.bubbleLookAt = function(x,y){pt={x:Math.max(-1.6,Math.min(1.6,x)),y:Math.max(-1.4,Math.min(1.4,y))};ptT=performance.now();down=false;};
+
+/* Bubble 0.13 - turnos orquestrados, sem interromper animações ou ciclos de ferramentas. */
+(function(){
+  auto=false;
+  let open=false,pendingOpen=null,opening=[],pos=0;
+  const normal=['neutro','feliz','alegria','curioso','pensativo','entediado',
+                'sono','sono','sono','picareta de madeira','feliz','sono'];
+  const expanded=['curioso','sono','pensativo','sono','curioso','pensativo'];
+  const surprise=['espanto','piscadela','espanto'];
+  let normalIx=0,openedIx=0,turnDeadline=performance.now()+10000;
+  let pendingYawn=false;
+  let modeSequence=[];
+  function animationDuration(name){
+    if(name==='sono') return (Math.random()<.5?20000:30000);
+    if(name==='bocejando') return 4800;
+    if(TOOLS[name]) {
+      const period=TOOLS[name].c*1000;
+      return Math.ceil(10000/period)*period;
+    }
+    if(SWORDS[name]){
+      const period=SWORDS[name].c*1000;
+      return Math.ceil(10000/period)*period;
+    }
+    if(CT[name]){
+      const period=CT[name].c*1000;
+      return Math.ceil(10000/period)*period;
+    }
+    return 10000;
+  }
+  function nextTurn(){
+    let next;
+    // Dormir termina apenas depois do bocejo completo.
+    if(pendingYawn){pendingYawn=false;next='bocejando'}
+    else {
+      if(pendingOpen!==null){
+        open=pendingOpen;pendingOpen=null;
+        modeSequence=open?surprise.slice():[];
+        openedIx=0;
+      }
+      if(modeSequence.length)next=modeSequence.shift();
+      else if(open)next=expanded[(openedIx++)%expanded.length];
+      else next=normal[(normalIx++)%normal.length];
+      if(next==='sono')pendingYawn=true;
+    }
+    set(next,false);
+    turnDeadline=performance.now()+animationDuration(next);
+  }
+  window.bubbleModeChanged=(isOpen)=>{
+    pendingOpen=!!isOpen;
+  };
+  window.bubbleLookAt=(x,y)=>{
+    pt={x:Math.max(-1.6,Math.min(1.6,x)),y:Math.max(-1.4,Math.min(1.4,y))};
+    ptT=performance.now();
+  };
+  // Começa normalmente e respeita 10s antes da primeira troca.
+  set('neutro',false);
+  function tick(now){
+    if(now>=turnDeadline)nextTurn();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
 </script></body></html>
