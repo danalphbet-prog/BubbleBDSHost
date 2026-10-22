@@ -2,6 +2,7 @@ package com.bubble.bdshost;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -1518,9 +1519,9 @@ public class MainActivity extends Activity {
         card.addView(desc);
 
         TextView install = addonInstallButton(
-                pack.active ? "DESINSTALAR" : "INSTALAR",
+                pack.active ? "DESATIVAR" : "ATIVAR",
                 pack.active);
-        install.setOnClickListener(v -> toggleAddonInstall(pack, install));
+        install.setOnClickListener(v -> toggleAddonActive(pack, install));
         addonActionViews.add(install);
         card.addView(install, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
@@ -1540,7 +1541,7 @@ public class MainActivity extends Activity {
         return button;
     }
 
-    private void toggleAddonInstall(AddonManager.PackInfo pack, TextView button) {
+    private void toggleAddonActive(AddonManager.PackInfo pack, TextView button) {
         if (BdsService.isRunning(this)) {
             Toast.makeText(
                     this,
@@ -1549,11 +1550,11 @@ public class MainActivity extends Activity {
             return;
         }
 
-        boolean install = !pack.active;
+        boolean activate = !pack.active;
 
         button.setEnabled(false);
         button.setAlpha(.76f);
-        button.setText(install ? "INSTALANDO..." : "DESINSTALANDO...");
+        button.setText(activate ? "ATIVANDO..." : "DESATIVANDO...");
         button.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
         button.animate().scaleX(.96f).scaleY(.96f).setDuration(90).withEndAction(() ->
                 button.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
@@ -1561,16 +1562,16 @@ public class MainActivity extends Activity {
 
         if (addonStatus != null) {
             addonStatus.setText(
-                    (install ? "Instalando " : "Desinstalando ")
+                    (activate ? "Ativando " : "Desativando ")
                             + (pack.name == null ? "add-on" : pack.name) + "...");
         }
 
         try {
-            AddonManager.setActive(this, addonWorldName(), pack, install);
-            pack.active = install;
+            AddonManager.setActive(this, addonWorldName(), pack, activate);
+            pack.active = activate;
 
             button.setAlpha(1f);
-            button.setText(install ? "✓ INSTALADO" : "✓ DESINSTALADO");
+            button.setText(activate ? "✓ ATIVADO" : "✓ DESATIVADO");
             button.setBackground(box(
                     Color.rgb(62,43,86),
                     Color.rgb(154,118,188),
@@ -1579,16 +1580,16 @@ public class MainActivity extends Activity {
             if (addonStatus != null) {
                 addonStatus.setText(
                         (pack.name == null ? "Add-on" : pack.name)
-                                + (install
-                                    ? " foi instalado no mundo."
-                                    : " foi desinstalado do mundo."));
+                                + (activate
+                                    ? " foi ativado no mundo."
+                                    : " foi desativado no mundo."));
             }
 
             handler.postDelayed(this::refreshAddonList, 650);
         } catch (Exception e) {
             button.setEnabled(true);
             button.setAlpha(1f);
-            button.setText(install ? "INSTALAR" : "DESINSTALAR");
+            button.setText(activate ? "ATIVAR" : "DESATIVAR");
             if (addonStatus != null) {
                 addonStatus.setText("Falha: " + e.getMessage());
             }
@@ -2046,19 +2047,10 @@ public class MainActivity extends Activity {
 
         TextView action;
         if (info.installed) action = versionMiniButton("EM USO", false);
-        else if (info.downloaded) action = versionMiniButton("USAR", true);
+        else if (info.downloaded) action = versionMiniButton("ATIVAR", true);
         else if (info.remote) action = versionMiniButton("BAIXAR", true);
         else action = versionMiniButton("—", false);
         row.addView(action, new LinearLayout.LayoutParams(dp(78), dp(42)));
-
-        if (!info.installed && info.downloaded) {
-            TextView trash = versionMiniButton("🗑", true);
-            trash.setTypeface(Typeface.DEFAULT);
-            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(dp(44), dp(42));
-            tp.setMargins(dp(6), 0, 0, 0);
-            row.addView(trash, tp);
-            trash.setOnClickListener(v -> runBdsVersionDelete(dialog, list, status, info));
-        }
 
         if (!info.installed && (info.downloaded || info.remote)) {
             action.setOnClickListener(v -> {
@@ -2116,7 +2108,26 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Pare o servidor antes de alternar a versão.", Toast.LENGTH_LONG).show();
             return;
         }
-        status.setText("Alternando para " + info.channelLabel() + " " + info.version + "...");
+        new AlertDialog.Builder(this)
+                .setTitle("Ativar " + info.channelLabel() + " " + info.version + "?")
+                .setMessage("A troca do BDS pode atualizar o formato de um mundo quando ele "
+                        + "for aberto na nova versão. Um mundo salvo em versão mais recente "
+                        + "pode não funcionar ao voltar para uma anterior.\n\n"
+                        + "Faça backup do mundo antes de continuar. Os mundos e add-ons "
+                        + "serão preservados, mas os arquivos de versões BDS inativas "
+                        + "serão apagados automaticamente.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Ativar", (whichDialog, which) ->
+                        performBdsVersionActivate(dialog, list, status, info))
+                .show();
+    }
+
+    private void performBdsVersionActivate(
+            Dialog dialog,
+            LinearLayout list,
+            TextView status,
+            BdsVersionManager.VersionInfo info) {
+        status.setText("Ativando " + info.channelLabel() + " " + info.version + "...");
         new Thread(() -> {
             try {
                 BdsVersionManager.activate(this, info, (percent, stage) ->
@@ -2140,31 +2151,6 @@ public class MainActivity extends Activity {
                 });
             }
         }, "bubble-bds-version-activate").start();
-    }
-
-    private void runBdsVersionDelete(
-            Dialog dialog,
-            LinearLayout list,
-            TextView status,
-            BdsVersionManager.VersionInfo info) {
-        new Thread(() -> {
-            try {
-                BdsVersionManager.deleteDownloaded(this, info);
-                BdsVersionManager.Catalog fresh;
-                try { fresh = BdsVersionManager.fetchCatalog(this); }
-                catch (Exception ignored) { fresh = BdsVersionManager.localCatalog(this); }
-                BdsVersionManager.Catalog result = fresh;
-                handler.post(() -> {
-                    bdsVersionCatalog = result;
-                    if (dialog.isShowing()) renderBdsVersionList(dialog, list, status, result);
-                    Toast.makeText(this, "Versão baixada removida.", Toast.LENGTH_SHORT).show();
-                });
-            } catch (Exception e) {
-                handler.post(() -> {
-                    if (dialog.isShowing()) status.setText("Não foi possível apagar: " + e.getMessage());
-                });
-            }
-        }, "bubble-bds-version-delete").start();
     }
 
     // -----------------------------------------------------------------
@@ -2393,6 +2379,41 @@ public class MainActivity extends Activity {
             return;
         }
 
+        String previousWorld = clean(getProperty("level-name", "Meu Mundo Bubble"));
+        String nextWorld = clean(worldName.getText().toString());
+        if (nextWorld.isEmpty()) nextWorld = "Meu Mundo Bubble";
+        String previousSeed = clean(getProperty("level-seed", ""));
+        String nextSeed = clean(seed.getText().toString());
+        boolean changingWorld = !previousWorld.equals(nextWorld);
+        boolean changingSeed = !previousSeed.equals(nextSeed);
+
+        if (changingWorld || changingSeed) {
+            StringBuilder message = new StringBuilder();
+            if (changingWorld) {
+                message.append("Mundo atual: ").append(previousWorld)
+                        .append("\nMundo selecionado: ").append(nextWorld)
+                        .append("\n\nTrocar o nome seleciona outro mundo. "
+                                + "O mundo anterior não será excluído.\n\n");
+            }
+            if (changingSeed) {
+                message.append("Você alterou a seed. Ela só determina a geração "
+                        + "de um mundo novo; mudar a seed não recria um mundo existente.\n\n");
+            }
+            message.append("Confirme a alteração antes de iniciar. "
+                    + "Recomendamos um backup dos mundos importantes.");
+            new AlertDialog.Builder(this)
+                    .setTitle("Confirmar alterações do mundo")
+                    .setMessage(message.toString())
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("Confirmar e iniciar", (dialog, which) -> saveAndStartServer())
+                    .show();
+            return;
+        }
+        saveAndStartServer();
+    }
+
+    private void saveAndStartServer() {
+        if (BdsService.isRunning(this)) return;
         try {
             saveConfig();
         } catch (Exception e) {
@@ -2543,6 +2564,10 @@ public class MainActivity extends Activity {
         int tick = intValue(tickDistance, 4, 12, "Distância de simulação");
         int threads = intValue(maxThreads, 0, 128, "Threads máximas");
 
+        if (world.equals(".") || world.equals("..") || world.contains("/") ||
+                world.contains("\\")) {
+            throw new IllegalArgumentException("Nome do mundo inválido: evite barras e caminhos relativos.");
+        }
         text = replace(text,"level-name",world);
         text = replace(text,"level-seed",clean(seed.getText().toString()));
         text = replace(text,"gamemode",creativeMode ? "creative" : "survival");

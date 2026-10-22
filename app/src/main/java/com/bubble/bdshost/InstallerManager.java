@@ -305,10 +305,17 @@ public final class InstallerManager {
         }
 
         ZipUtils.validateBdsZip(zip);
-        stageProgress(88, "Extraindo BDS " + resolvedVersion); progress(91, "Extraindo BDS");
+        stageProgress(88, "Isolando packs da versão anterior"); progress(91, "Preparando BDS");
+        ZipUtils.clearBundledPacksBeforeExtract(zip, AppPaths.bds(context));
         ZipUtils.extractBds(zip, AppPaths.bds(context));
         patchServerProperties(new File(AppPaths.bds(context), "server.properties"));
         writeText(marker, bdsChannel + "|" + resolvedVersion + "\n");
+        try {
+            BdsVersionManager.cleanupInactiveArchives(context);
+        } catch (Exception cleanupError) {
+            log("Aviso: BDS instalado, mas a limpeza de ZIPs antigos não terminou: "
+                    + cleanupError.getMessage());
+        }
         stageProgress(100, "BDS " + resolvedVersion + " instalado");
         log("[7/8] ✓ BDS " + resolvedVersion + " instalado");
     }

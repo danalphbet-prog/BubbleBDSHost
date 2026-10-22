@@ -243,7 +243,8 @@ public final class BdsVersionManager {
             if (f.isFile()) backups.put(name, readBytes(f));
         }
 
-        if (progress != null) progress.onProgress(5, "Preparando troca de versão");
+        if (progress != null) progress.onProgress(5, "Isolando conteúdo da versão anterior");
+        ZipUtils.clearBundledPacksBeforeExtract(archive, bds);
         ZipUtils.extractBds(archive, bds);
         if (progress != null) progress.onProgress(82, "Restaurando configurações");
 
@@ -255,6 +256,13 @@ public final class BdsVersionManager {
         server.setExecutable(true, false);
         writeText(InstallerManager.bdsMarker(context), info.channel + "|" + info.version + "\n");
         info.installed = true;
+        // Apenas o ZIP da versão em uso permanece em cache. Mundos e add-ons são preservados.
+        try {
+            cleanupInactiveArchives(context);
+        } catch (Exception cleanupError) {
+            if (progress != null) progress.onProgress(96,
+                    "Versão ativa; limpeza de ZIPs antigos pendente: " + cleanupError.getMessage());
+        }
         if (progress != null) progress.onProgress(100, "Versão ativa: " + info.version);
     }
 
@@ -264,28 +272,60 @@ public final class BdsVersionManager {
         File behaviorVanilla = new File(bds, "behavior_packs/vanilla/manifest.json");
         File resourceVanilla = new File(bds, "resource_packs/vanilla/manifest.json");
 
-        if (behaviorVanilla.isFile() && resourceVanilla.isFile()) return false;
-
+        boolean missingVanilla = !behaviorVanilla.isFile() || !resourceVanilla.isFile();
         String version = InstallerManager.readInstalledBdsVersion(context);
         String channel = installedChannel(context);
         File archive = findArchive(context, channel, version);
 
         if (archive == null || !archive.isFile()) {
-            throw new IllegalStateException(
-                    "Conteúdo padrão do servidor está incompleto. Baixe novamente a versão ativa.");
+            if (missingVanilla) {
+                throw new IllegalStateException(
+                        "Conteúdo padrão incompleto. Baixe novamente a versão ativa.");
+            }
+            return ZipUtils.pruneBundledPacksAboveVersion(bds, version) > 0;
         }
 
-        if (progress != null) progress.onProgress(10, "Verificando conteúdo padrão");
         ZipUtils.validateBdsZip(archive);
-        if (progress != null) progress.onProgress(25, "Restaurando conteúdo padrão");
+        int removed = ZipUtils.pruneBundledPacksForArchive(archive, bds);
+        if (!missingVanilla && removed == 0) return false;
+        if (progress != null) progress.onProgress(25, "Ajustando conteúdo padrão da versão ativa");
         ZipUtils.extractBds(archive, bds);
-
         if (!behaviorVanilla.isFile() || !resourceVanilla.isFile()) {
             throw new IllegalStateException("Pacote Vanilla não foi restaurado.");
         }
-
-        if (progress != null) progress.onProgress(100, "Conteúdo padrão restaurado");
+        if (progress != null) progress.onProgress(100, "Conteúdo padrão corrigido");
         return true;
+    }
+
+    /** Descarta ZIPs de versões não ativas após uma ativação concluída. */
+    public static void cleanupInactiveArchives(Context context) throws Exception {
+        if (BdsService.isRunning(context)) {
+            throw new IllegalStateException("O servidor deve estar parado para limpar as versões.");
+        }
+        String activeVersion = InstallerManager.readInstalledBdsVersion(context);
+        String activeChannel = installedChannel(context);
+        if (activeVersion == null || "—".equals(activeVersion)) return;
+        String activeArchiveName = activeChannel + "-" + activeVersion + ".zip";
+
+        File[] managed = archiveDir(context).listFiles();
+        if (managed != null) {
+            for (File f : managed) {
+                if (f.isFile() && f.getName().endsWith(".zip") &&
+                        !f.getName().equals(activeArchiveName) && !f.delete()) {
+                    throw new IllegalStateException("Falha ao limpar cache: " + f.getName());
+                }
+            }
+        }
+        File[] legacy = AppPaths.downloads(context).listFiles();
+        if (legacy != null) {
+            String current = "bedrock-server-" + activeVersion + ".zip";
+            for (File f : legacy) {
+                if (f.isFile() && f.getName().matches("bedrock-server-[0-9.]+\\.zip") &&
+                        !f.getName().equals(current) && !f.delete()) {
+                    throw new IllegalStateException("Falha ao limpar ZIP antigo: " + f.getName());
+                }
+            }
+        }
     }
 
     public static void deleteDownloaded(Context context, VersionInfo info) throws Exception {
