@@ -835,6 +835,13 @@ public class MainActivity extends Activity {
                 switchBlock(cheats),
                 switchBlock(forceGamemode)));
 
+        TextView experimentHint = tv(
+                "◈  Experimentos padrão: Beta APIs / GameTest + recursos de blocos e itens", 
+                10.5f, WHITE, Typeface.BOLD);
+        experimentHint.setPadding(dp(12),dp(12),dp(12),dp(12));
+        experimentHint.setBackground(box(
+                Color.rgb(66,20,30), Color.rgb(181,49,67), 14));
+        c.addView(experimentHint, match(0,11,0,3));
         return c;
     }
 

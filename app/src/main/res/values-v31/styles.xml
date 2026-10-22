@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="BubblePixelLaunchTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#14060B</item>
+        <item name="android:statusBarColor">#14060B</item>
+        <item name="android:navigationBarColor">#14060B</item>
+        <item name="android:windowSplashScreenBackground">#14060B</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/bubble_pixel_splash</item>
+    </style>
+</resources>

@@ -3,61 +3,33 @@ package com.bubble.bdshost;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.View;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
+import android.view.Gravity;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 public class SplashActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
-
-    @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        getWindow().setNavigationBarColor(Color.BLACK);
-        hideStatusBar();
-
-        ImageView splash = new ImageView(this);
-        splash.setImageResource(R.drawable.splash_screen);
-        splash.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        splash.setBackgroundColor(Color.rgb(255,20,43));
-        setContentView(splash);
-
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        getWindow().setStatusBarColor(Color.rgb(20,6,11));
+        getWindow().setNavigationBarColor(Color.rgb(20,6,11));
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackgroundColor(Color.rgb(20,6,11));
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.bubble_pixel_splash);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int size = (int)(232 * getResources().getDisplayMetrics().density + 0.5f);
+        frame.addView(icon, new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
+        setContentView(frame);
         handler.postDelayed(() -> {
             startActivity(new Intent(this, MainActivity.class));
             finish();
-            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-        }, 3000);
+            overridePendingTransition(android.R.anim.fade_in,android.R.anim.fade_out);
+        }, 1100);
     }
-
-    @Override public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) hideStatusBar();
-    }
-
-    private void hideStatusBar() {
-        if (Build.VERSION.SDK_INT >= 30) {
-            getWindow().setDecorFitsSystemWindows(false);
-            View decor = getWindow().getDecorView();
-            if (decor != null && decor.isAttachedToWindow()) {
-                WindowInsetsController c = getWindow().getInsetsController();
-                if (c != null) {
-                    c.hide(WindowInsets.Type.statusBars());
-                    c.setSystemBarsBehavior(
-                            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                }
-            }
-        } else {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_FULLSCREEN |
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-        }
-    }
-
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         super.onDestroy();

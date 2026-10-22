@@ -88,6 +88,21 @@ public class BdsService extends Service {
                 String cmd = "export BOX64_NOBANNER=1 BOX64_LOG=0 " +
                         "BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_STRONGMEM=1; " +
                         "export LD_LIBRARY_PATH=.; exec box64 ./bedrock_server";
+
+                // Para mundos recém-criados, deixa a própria versão do Bedrock gerar
+                // level.dat primeiro. Depois aplica apenas as flags experimentais,
+                // preservando seed, versão, modo de jogo e outros campos do mundo.
+                File level = WorldExperiments.selectedWorldLevel(this);
+                if (!level.isFile()) bootstrapWorldForExperiments(cmd, level);
+                if ("stopping".equals(state(this))) {
+                    throw new InterruptedException("Inicialização cancelada");
+                }
+                if (WorldExperiments.ensureDefaults(level)) {
+                    appendLog("[bubble] Beta APIs e experimentos padrão ativados neste mundo.\n");
+                } else {
+                    appendLog("[bubble] Experimentos padrão conferidos.\n");
+                }
+
                 process = RuntimeEngine.start(this, "/root/bds", cmd);
                 stdin = new BufferedWriter(new OutputStreamWriter(
                         process.getOutputStream(), StandardCharsets.UTF_8));
@@ -121,6 +136,47 @@ public class BdsService extends Service {
                 stopSelf();
             }
         }, "bds-runtime").start();
+    }
+
+    private void bootstrapWorldForExperiments(String cmd, File level) throws Exception {
+        appendLog("[bubble] Criando mundo com a versão instalada...\n");
+        Process init = RuntimeEngine.start(this, "/root/bds", cmd);
+        synchronized (this) {
+            process = init;
+            stdin = new BufferedWriter(new OutputStreamWriter(
+                    init.getOutputStream(), StandardCharsets.UTF_8));
+        }
+        boolean ready = false;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                init.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                appendLog(line + "\n");
+                if (line.contains("Server started.")) {
+                    ready = true;
+                    synchronized (this) {
+                        if (stdin != null) {
+                            stdin.write("stop");
+                            stdin.newLine();
+                            stdin.flush();
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        if (!init.waitFor(45, java.util.concurrent.TimeUnit.SECONDS)) {
+            init.destroyForcibly();
+            throw new IllegalStateException("A preparação do mundo excedeu o limite de tempo.");
+        }
+        synchronized (this) {
+            process = null;
+            stdin = null;
+        }
+        if (!ready || !level.isFile()) {
+            throw new IllegalStateException("O mundo não foi gerado corretamente.");
+        }
+        appendLog("[bubble] Mundo criado; aplicando experimentos padrão...\n");
     }
 
     private synchronized void sendCommand(String command) {

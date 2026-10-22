@@ -13,13 +13,14 @@
         android:extractNativeLibs="true"
         android:icon="@drawable/bubble_app_icon"
         android:roundIcon="@drawable/bubble_app_icon"
-        android:label="Bubble BDS Host"
+        android:label="Bubble"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
             android:name=".SplashActivity"
+            android:theme="@style/BubblePixelLaunchTheme"
             android:exported="true"
             android:screenOrientation="unspecified">
             <intent-filter>

@@ -123,6 +123,9 @@ public final class AddonManager {
                 // Protege os packs internos do BDS (vanilla, chemistry etc.).
                 // Packs importados pela Bubble sempre usam o prefixo bubble_.
                 if (!child.getName().startsWith("bubble_")) continue;
+                // Arquivos originais do núcleo não podem aparecer como add-ons.
+                String folder = child.getName().toLowerCase(Locale.ROOT);
+                if (folder.equals("vanilla") || folder.equals("chemistry")) continue;
                 PackInfo info = parsePack(child, type);
                 if (info == null) continue;
                 info.active = activeIds.contains(info.uuid.toLowerCase(Locale.ROOT));
