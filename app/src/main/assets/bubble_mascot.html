@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bolha 0.4 · pixel</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg1:#ffe3ee;--bg2:#e6e1ff;--btn:#ffffffcc;--tx:#1a1a1f;--sh:#0002}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg1:#2a1a26;--bg2:#1c1a33;--btn:#ffffff18;--tx:#f4f4f8;--sh:#0006}}
+:root[data-theme="dark"]{--bg1:#2a1a26;--bg2:#1c1a33;--btn:#ffffff18;--tx:#f4f4f8;--sh:#0006}
+html,body{margin:0;height:100%}
+body{background:linear-gradient(160deg,var(--bg1),var(--bg2));color:var(--tx);font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{width:min(92vw,440px);aspect-ratio:1;flex:0 1 auto;min-height:0;image-rendering:pixelated;margin-top:8px;touch-action:none}
+.g{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:8px 14px 20px;max-width:560px;overflow-y:auto;max-height:30dvh;touch-action:pan-y;flex:0 0 auto}
+button{border:0;background:var(--btn);color:var(--tx);font:600 14px system-ui;padding:10px 14px;border-radius:8px;box-shadow:0 1px 4px var(--sh)}
+button.on{background:#ff4f8b;color:#fff}
+small{opacity:.65;padding:0 16px;text-align:center}
+</style><style id="overlayBubbleStyles">
+html,body{margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:transparent!important;display:block!important}
+canvas{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;min-height:0!important;margin:0!important;aspect-ratio:1!important;image-rendering:pixelated!important;pointer-events:none!important}
+.g,small{display:none!important}
+</style></head><body>
+<canvas id="c" width="112" height="112" role="img" aria-label="Bolha, mascote em pixel art"></canvas>
+<small>Bolha 64×64 · olhos 16×16 · boca 32×16 — toque e arraste em qualquer lugar</small>
+<div class="g" id="tabs"></div>
+<div class="g" id="g"></div>
+<script>
+const $=i=>$.c[i]||($.c[i]=document.getElementById(i));$.c={};
+const X=$('c').getContext('2d');
+const MQ=matchMedia('(prefers-color-scheme: dark)');let dark=MQ.matches,INK,BUB;const LINE='#ff7aa8';
+function thm(){dark=MQ.matches;INK=dark?'#f4f4f8':'#1a1a1f';BUB=dark?'#2b2b35':'#ffffff'}thm();MQ.addEventListener('change',thm);
+const D={ht:0,xx:0,tr:0,lo:1,ro:1,es:1,arc:0,la:0,lc:0,ch:0,mw:13,ms:.3,mo:0,msk:0,mx:0,lx:0,ly:0,tilt:0,bl:0};
+const E={
+neutro:{},
+feliz:{arc:1,mw:20,ms:1,mo:.35,bl:.7,ly:-.1},
+alegria:{ch:1,mw:22,ms:1,mo:.9,bl:.9,ly:-.2,tilt:6},
+triste:{es:.9,la:-18,lc:.3,mw:12,ms:-.9,ly:.5,lo:.85,ro:.85},
+espanto:{es:1.35,mw:7,ms:0,mo:1.2,ly:-.2},
+curioso:{ro:1.2,lo:.7,es:1.05,lc:.15,mw:9,ms:0,msk:3,mx:6,lx:.6,ly:-.3,tilt:8},
+bravo:{la:22,lc:.38,es:1.05,mw:16,ms:-.7,mo:.1},
+sono:{lo:.15,ro:.15,mw:8,ms:0,mo:.5,ly:.5,tilt:-6},
+confuso:{lo:.8,ro:1.15,la:-8,lc:.2,mw:14,ms:0,msk:5,mx:-4,tilt:-7},
+piscadela:{ro:.02,mw:16,ms:.9,mo:.3,msk:-2,tilt:5,bl:.6,lx:.2},
+amor:{arc:1,es:1.1,mw:11,ms:.8,mo:.2,bl:1,ly:-.1},
+assustado:{es:1.25,lo:1.1,ro:1.1,mw:12,ms:-.5,mo:.4,ly:.1,tr:.7,la:-6,lc:.1},
+chorando:{la:-16,lc:.35,es:.95,mw:13,ms:-1,mo:.55,ly:.5,tr:.5,tilt:-3},
+apaixonado:{ht:1,mw:14,ms:1,mo:.35,bl:1,tilt:5,ly:-.1},
+tonto:{xx:1,mw:12,ms:-.2,mo:.25,msk:4,tilt:-10,lx:.2},
+maroto:{lo:.85,ro:.85,la:14,lc:.3,mw:15,ms:.7,msk:5,mx:5,lx:.4,tilt:4},
+pensativo:{lo:.8,ro:.8,mw:7,ms:0,msk:3,mx:8,lx:.8,ly:-.7},
+envergonhado:{arc:1,mw:9,ms:.5,bl:1,lx:-.5,ly:.6,tilt:-5},
+emburrado:{la:12,lc:.3,mw:10,ms:-.9,bl:.5,ly:.3},
+gargalhada:{ch:1,mw:24,ms:1,mo:1.3,tilt:8,tr:.6,bl:.6},
+furioso:{la:28,lc:.45,mw:18,ms:-1,mo:.5,tr:.5},
+entediado:{lo:.6,ro:.6,lc:.45,mw:10,ms:0,ly:.2},
+nojinho:{la:8,lc:.4,lo:.8,ro:.8,mw:16,ms:-.8,msk:3,mx:-3},
+beijinho:{ro:.02,mw:4,ms:0,mo:.45,bl:.9,tilt:6,lx:.2},
+mastigando:{mw:12,ms:.1,mo:.2,ly:.1},
+'boca fechada':{mw:11,ms:0,mo:0,ly:.1},
+bocejando:{mw:10,ms:0,mo:0},
+'picareta de madeira':{mw:11,ms:.2,mo:0},
+'picareta de pedra':{mw:11,ms:.2,mo:0},
+'picareta de cobre':{mw:11,ms:.2,mo:0},
+'picareta de ferro':{mw:11,ms:.2,mo:0},
+'picareta de ouro':{mw:11,ms:.2,mo:0},
+'picareta de diamante':{mw:11,ms:.2,mo:0},
+'picareta de netherite':{mw:11,ms:.2,mo:0},
+'espada de madeira':{mw:11,ms:.2,mo:0},
+'espada de pedra':{mw:11,ms:.2,mo:0},
+'espada de ferro':{mw:11,ms:.2,mo:0},
+'espada de cobre':{mw:11,ms:.2,mo:0},
+'espada de ouro':{mw:11,ms:.2,mo:0},
+'espada de diamante':{mw:11,ms:.2,mo:0},
+'espada de netherite':{mw:11,ms:.2,mo:0}
+};
+const S={},V={},T={};for(const k in D){S[k]=D[k];V[k]=0;T[k]=D[k]}
+const K={ht:[200,.7],xx:[200,.7],tr:[120,.8],lo:[260,.55],ro:[260,.55],es:[200,.6],arc:[180,.7],la:[160,.55],lc:[160,.6],ch:[180,.7],mw:[150,.5],ms:[140,.45],mo:[170,.4],msk:[150,.5],mx:[120,.5],lx:[70,.55],ly:[70,.55],tilt:[90,.4]};
+let sq=0,sqv=0,bk=1,bkP=-1,nextBk=1.5,auto=true,cur='neutro',talk=false,pt=null,ptT=0,autoT=0,down=false,gz=0,cb=0,zA=0,hA=0,vA=0,qA=0,cA=0;
+const g=document.getElementById('g');
+function set(n,man){cur=n;Object.assign(T,D,E[n]);sqv+=.05+Math.random()*.04;rs=1;if(man){auto=false;ab.classList.remove('on')}[...g.children].forEach(b=>{const o=b.dataset.n==n;b.classList.toggle('on',o);b.setAttribute('aria-pressed',o)})}
+for(const n in E){const b=document.createElement('button');b.textContent=n;b.dataset.n=n;b.onclick=()=>set(n,1);g.appendChild(b)}
+const tb=document.createElement('button');tb.textContent='falar';tb.onclick=()=>{talk=!talk;tb.classList.toggle('on',talk)};g.appendChild(tb);
+const ab=document.createElement('button');ab.textContent='auto';ab.className='on';ab.onclick=()=>{auto=!auto;ab.classList.toggle('on',auto)};g.appendChild(ab);
+const tabs=document.getElementById('tabs');
+function showCat(){[...g.children].forEach(b=>{const m=MC.includes(b.dataset.n);b.style.display=b.dataset.n?((cat==='m')===m?'':'none'):(cat==='r'?'':'none')});[...tabs.children].forEach(b=>b.classList.toggle('on',b.dataset.c===cat))}
+[['r','Reações'],['m','Minecraft']].forEach(([c,l])=>{const b=document.createElement('button');b.textContent=l;b.dataset.c=c;b.onclick=()=>{cat=c;if(c==='m'){set(MC[0],1)}else{set('feliz',1)}showCat()};tabs.appendChild(b)});
+function mv(e){const r=$('c').getBoundingClientRect(),u=r.width*.3;pt={x:(e.clientX-r.left-r.width/2)/u,y:(e.clientY-r.top-r.height/2)/u};ptT=performance.now()}
+addEventListener('pointerdown',e=>{if(e.target.closest('.g'))return;down=true;mv(e);sqv+=.1});
+addEventListener('pointermove',e=>{if(down||e.pointerType==='mouse')mv(e)});
+addEventListener('pointerup',()=>{down=false;ptT=performance.now()-2000});
+addEventListener('pointercancel',()=>{down=false});
+/* sprites */
+const SPR={"wooden":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#372910","b":"#866526","c":"#755821","d":"#6b511f","e":"#493615","f":"#684e1e","g":"#20180a","h":"#896727","i":"#281e0b"}},"stone":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#494949","b":"#9a9a9a","c":"#898989","d":"#7f7f7f","e":"#493615","f":"#684e1e","g":"#181818","h":"#896727","i":"#281e0b"}},"copper":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#5e2b1c","b":"#f99780","c":"#e0806b","d":"#d36c47","e":"#483515","f":"#674d1e","g":"#411c11","h":"#876627","i":"#271e0b"}},"iron":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#444444","b":"#ffffff","c":"#d8d8d8","d":"#c1c1c1","e":"#493615","f":"#684e1e","g":"#181818","h":"#896727","i":"#281e0b"}},"golden":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#805c16","b":"#fafc75","c":"#e7eb56","d":"#e6af15","e":"#483515","f":"#674d1e","g":"#3e2d0e","h":"#876627","i":"#271e0b"}},"diamond":{"r":["................","................","......aaaaa.....",".....abcddcaef..","......agggddhi..","..........ecdg..",".........efidcg.","........ehi.gdg.",".......efi..gdg.","......ehi...gcg.",".....efi....gbg.","....ehi......g..","...efi..........","..ehi...........","..ii............","................"],"p":{"a":"#0e3e35","b":"#32e8c9","c":"#2ac5aa","d":"#27b098","e":"#483515","f":"#674d1e","g":"#082520","h":"#876627","i":"#271e0b"}},"netherite":{"r":["................","................","......aaaaa.....",".....abbbcdaae..","......afffgdhf..","..........egdf..",".........eifgdf.","........ehf.fcf.",".......eif..fbf.","......ehf...fbf.",".....ejf....fbf.","....ekf......f..","...ejf..........","..ehf...........","..ff............","................"],"p":{"a":"#49283f","b":"#847a84","c":"#6f666f","d":"#5c555c","e":"#2e2122","f":"#231012","g":"#4e3b3d","h":"#724442","i":"#5f3331","j":"#3a383a","k":"#423f42"}}};
+const TOOLS={
+'picareta de madeira':{s:'wooden',c:1.6,hp:3,b:'stone'},
+'picareta de pedra':{s:'stone',c:1.35,hp:3,b:'stone'},
+'picareta de cobre':{s:'copper',c:1.15,hp:3,b:'copper'},
+'picareta de ferro':{s:'iron',c:.95,hp:3,b:'iron'},
+'picareta de ouro':{s:'golden',c:.8,hp:2,b:'gold'},
+'picareta de diamante':{s:'diamond',c:3.6,hp:3,b:'diamond',sp:1,H:52,turns:2,sc:['#7ff3ff','#c9fbff','#2fd8e8']},
+'picareta de netherite':{s:'netherite',c:4.2,hp:3,b:'debris',sp:1,H:68,turns:4,sc:['#ff7a1a','#ffb347','#ff4a1a','#4a3a3a']}
+};
+const SWORDS={
+'espada de madeira':{s:'wooden',c:3,trail:'#ffffff'},
+'espada de pedra':{s:'stone',c:6},
+'espada de ferro':{s:'iron',c:2.4,trail:'#ffffff'},
+'espada de cobre':{s:'copper',c:4.5,trail:'#ffb27a'},
+'espada de ouro':{s:'golden',c:6.5,trail:'#ffe14a'},
+'espada de diamante':{s:'diamond',c:3.6,sp:1,H:50,trail:'#bff8ff',sc:['#7ff3ff','#c9fbff','#2fd8e8']},
+'espada de netherite':{s:'netherite',c:5.2,sp:1,H:66,trail:'#ffb347',sc:['#ff7a1a','#ffb347','#ff4a1a','#4a3a3a']}
+};
+const MC=[...Object.keys(TOOLS),...Object.keys(SWORDS)];let rs=0,cat='r',mu=0,lastMu=0,hits=0,brk=0,gone=false,PART=[],GBX=0,GBY=0;
+const BLK={stone:{g:['#8e8e8e','#7d7d7d','#9a9a9a','#858585','#707070']},iron:{s:'#d9b296'},gold:{s:'#fcdf4b'},copper:{s:'#e4803f'},diamond:{s:'#4fe9f2'},debris:{g:['#5b3b2e','#4d3126','#6a4636','#563629','#42291f'],s:'#b08968'}};
+const CR=[[3,2],[4,3],[5,4],[6,5],[7,6],[8,7],[9,8],[10,9],[6,6],[5,7],[4,8],[8,4],[9,3],[2,9],[11,5],[7,10],[3,11],[10,11]];
+function hit(){const Tl=TOOLS[cur];hits++;sqv+=.1;const done=hits>=Tl.hp,n=done?(Tl.sp?34:16):6,B=BLK[Tl.b],gs=B.g||BLK.stone.g;
+ for(let i=0;i<n;i++){let c=gs[i%5];if(B.s&&i%3==0)c=B.s;if(done&&Tl.sc&&i%2==0)c=Tl.sc[i%Tl.sc.length];PART.push({x:GBX+84+Math.random()*10,y:GBY+36+Math.random()*10,vx:(Math.random()*2-1)*(done?32:18),vy:-(10+Math.random()*(done?50:30)),l:0,c})}
+ if(done){hits=0;if(Tl.sp)gone=true;else brk=.6}}
+function dp(sp,ox,oy,qx,qy,deg,flt){const th=Math.round(deg/15)*15*Math.PI/180,c=Math.cos(th),s=Math.sin(th);
+ for(let dy=-56;dy<=56;dy++)for(let dx=-56;dx<=56;dx++){const sx=Math.floor(qx+(dx*c+dy*s)/2),sy=Math.floor(qy+(-dx*s+dy*c)/2);if(sx<0||sy<0||sx>15||sy>15)continue;const q=sp.r[sy][sx];if(q!=='.'&&(!flt||flt(sx,sy,q)))px(ox+dx,oy+dy,sp.p[q])}}
+function mine(bx,by,dt){const Tl=TOOLS[cur],sp=SPR[Tl.s],u=mu,e=x=>x*x*(3-2*x),B=BLK[Tl.b],gs=B.g||BLK.stone.g;GBX=bx;GBY=by;if(brk>0)brk-=dt;
+ const bxx=bx+84,byy=by+36,ox=bx+58,oy=by+46;
+ if(brk<=0&&!gone){for(let y=0;y<14;y++)for(let x=0;x<14;x++){const n=(x*7+y*13+x*y*3)%5,h=(x*13+y*7+x*y)%11,ed=x==0||y==0||x==13||y==13;px(bxx+x,byy+y,ed?'#4a4a4a':(B.s&&h<3&&x>1&&x<12&&y>1&&y<12?B.s:gs[n]))}
+  if(hits>0)CR.slice(0,Math.ceil(18/Tl.hp)*hits).forEach(([x,y])=>px(bxx+x,byy+y,'#2b2b2b'))}
+ if(!Tl.sp){const th=u<.55?10-80*e(u/.55):u<.66?-70+120*Math.pow((u-.55)/.11,1.6):u<.8?50-10*e((u-.66)/.14):40-30*e((u-.8)/.2);dp(sp,ox,oy,3,13.5,th)}
+ else if(u<.06)dp(sp,ox,oy,3,13.5,0);
+ else if(u<.5){const s=(u-.06)/.44;dp(sp,ox+10,oy-11-Tl.H*4*s*(1-s),8,8,360*Tl.turns*s)}
+ else if(u<.58)dp(sp,ox,oy,3,13.5,0);
+ else{let th=-60;for(const h of[.62,.7,.78]){const x=u-h;if(x>=-.07&&x<0)th=-60+110*Math.pow((x+.07)/.07,1.4);else if(x>=0&&x<.03)th=50;else if(x>=.03&&x<.06)th=50-110*e((x-.03)/.03)}
+  if(u>=.84)th=-60+60*e(Math.min(1,(u-.84)/.1));dp(sp,ox,oy,3,13.5,th)}
+ if(Tl.sp&&u>.78&&Math.random()<.45)PART.push({x:bx-4+Math.random()*76,y:by-4+Math.random()*66,vx:0,vy:-8,l:.3,c:Tl.sc[Math.random()*Tl.sc.length|0]});
+ PART=PART.filter(p=>{p.l+=dt;p.vy+=90*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.l<.7){px(p.x,p.y,p.c,1-p.l/.7,2,2);return true}return false})}
+const SWS={"wooden":{"r":[".............aaa","............abcd","...........abcbd","..........abcbd.",".........abcbd..","........abcbd...","..aa...aecbd....","..afa.aeced.....","...aedebed......","...aeefed.......","....afad........","...ghdaad.......","..gij.ddad......","aahj....dd......","afd.............","ddd............."],"p":{"a":"#372910","b":"#755821","c":"#866526","d":"#20180a","e":"#594319","f":"#473614","g":"#493615","h":"#684e1e","i":"#896727","j":"#281e0b"}},"stone":{"r":[".............aaa","............abcd","...........abcbd","..........abcbd.",".........abcbd..","........abcbd...","..aa...aecbd....","..afa.aeced.....","...aedebed......","...aeefed.......","....afad........","...ghdaad.......","..gij.ddad......","aahj....dd......","afd.............","ddd............."],"p":{"a":"#494949","b":"#95918d","c":"#b3b1af","d":"#212121","e":"#787777","f":"#5a5a5a","g":"#493615","h":"#684e1e","i":"#896727","j":"#281e0b"}},"copper":{"r":[".............aaa","............abbc","...........abdbc","..........abdbc.",".........abdec..","........abdec...","..aa...aedec....","..afa.aedec.....","...agcegec......","...aggfec.......","....afac........","...hicaac.......","..hjk.ccac......","aaik....cc......","afc.............","ccc............."],"p":{"a":"#5e2b1c","b":"#fad1c9","c":"#411c11","d":"#e0806b","e":"#f99780","f":"#7e3821","g":"#9a4d30","h":"#483515","i":"#674d1e","j":"#876627","k":"#271e0b"}},"iron":{"r":[".............aaa","............abbc","...........abdbc","..........abdbc.",".........abdec..","........abdec...","..aa...aedec....","..afa.aedec.....","...agcegec......","...aggfec.......","....afac........","...hicaac.......","..hjk.ccac......","aaik....cc......","afc.............","ccc............."],"p":{"a":"#444444","b":"#ffffff","c":"#181818","d":"#bebebe","e":"#d8d8d8","f":"#6b6b6b","g":"#969696","h":"#493615","i":"#684e1e","j":"#896727","k":"#281e0b"}},"diamond":{"r":[".............aaa","............abbc","...........abdbc","..........abdbc.",".........abdec..","........abdec...","..aa...aedec....","..afa.aedec.....","...agcegec......","...aggfec.......","....afac........","...hicaac.......","..hjk.ccac......","aaik....cc......","afc.............","ccc............."],"p":{"a":"#0e3f36","b":"#a4fdf0","c":"#092d2f","d":"#2bc7ac","e":"#33ebcb","f":"#156355","g":"#1e8a77","h":"#493615","i":"#684e1e","j":"#896727","k":"#281e0b"}},"netherite":{"r":[".............aaa","............abbc","...........abdbc","..........abebc.",".........adedc..","........afefc...","..aa...aeghc....","..afa.aeghc.....","...adahghc......","...addghc.......","....afec........","...ijchgc.......","..ikc.ccgc......","aalc....cc......","agc.............","mcc............."],"p":{"a":"#49283f","b":"#847a84","c":"#231012","d":"#6f666f","e":"#50434d","f":"#5c555c","g":"#312727","h":"#4e3b3d","i":"#2e2122","j":"#5f3331","k":"#724442","l":"#3a383a","m":"#160814"}}};
+SWS.golden={"r":[".............aaa","............abbc","...........abdbc","..........abdbc.",".........abdec..","........abdec...","..aa...aedec....","..afa.aedec.....","...agcegec......","...aggfec.......","....afac........","...hicaac.......","..hjk.ccac......","aaik....cc......","afc.............","ccc............."],"p":{"a":"#805c16","b":"#ffffc8","c":"#271e0b","d":"#e7eb56","e":"#fafc75","f":"#b48615","g":"#e6af15","h":"#493615","i":"#684e1e","j":"#896727","k":"#281e0b"}};
+const L=(a,b,x)=>a+(b-a)*x,E3=x=>x*x*(3-2*x);
+const SEQ=[-60,-150,30,-170,10,-130,40,-60],SEQN=[-60,-150,30,-60];
+const ANG={
+'espada de madeira':u=>u<.15?-55:u<.45?L(-55,-135,E3((u-.15)/.3)):u<.52?L(-135,25,Math.pow((u-.45)/.07,1.3)):u<.62?25-3*Math.sin((u-.52)/.1*Math.PI*3):u<.85?L(25,-55,E3((u-.62)/.23)):-55,
+'espada de pedra':u=>u<.08?100:u<.5?L(100,-50,E3((u-.08)/.42))+Math.sin(u*90)*3*Math.sin((u-.08)/.42*Math.PI):u<.58?-50:u<.9?-50+40*Math.sin((u-.58)/.32*Math.PI*3):L(-50,100,E3((u-.9)/.1)),
+'espada de ferro':u=>(u<.1||u>.8)?-60:-60+85*Math.sin((u-.1)/.7*Math.PI*8),
+'espada de cobre':u=>u<.3?-70+3*Math.sin(u*40):u<.5?-65+12*Math.sin((u-.3)*70):u<.72?-60+80*Math.sin((u-.5)/.22*Math.PI*6):u<.95?-15+75*Math.sin((u-.72)/.23*Math.PI*6-Math.PI/6):L(-52.5,-60,E3((u-.95)/.05)),
+'espada de ouro':u=>u<.3?-70+3*Math.sin(u*40):u<.5?-65+12*Math.sin((u-.3)*70):u<.68?-60+80*Math.sin((u-.5)/.18*Math.PI*6):u<.8?-15+75*Math.sin((u-.68)/.12*Math.PI*4-Math.PI/6):u<.85?L(-52.5,-95,E3((u-.8)/.05)):u<.97?-95+8*Math.sin((u-.85)*18):L(-95,-60,E3((u-.97)/.03)),
+'espada de diamante':u=>{if(u<.4||u>=.9)return -60;const q=(u-.4)/.5*7,k=Math.min(6,Math.floor(q));return L(SEQ[k],SEQ[k+1],E3(Math.min(1,(q-k)*1.15)))},
+'espada de netherite':u=>{if(u<.4||u>=.96)return u>=.96?L(-95,-60,E3((u-.96)/.04)):-60;if(u<.54){const q=(u-.4)/.14*3,k=Math.min(2,Math.floor(q));return L(SEQN[k],SEQN[k+1],E3(Math.min(1,(q-k)*1.15)))}if(u<.58)return L(-60,-95,E3((u-.54)/.04));return -95+8*Math.sin((u-.58)*14)}
+};
+function burst(x,y,cols,n,v){for(let i=0;i<n;i++)PART.push({x,y,vx:(Math.random()*2-1)*v,vy:-Math.random()*v,l:0,c:cols[i%cols.length]})}
+function trailArc(ox,oy,a0,a1,col){const lo=Math.min(a0,a1),hi=Math.max(a0,a1),w=hi-lo;if(w<10||w>200)return;
+ for(let dy=-42;dy<=42;dy++)for(let dx=-42;dx<=42;dx++){const r=Math.hypot(dx,dy);if(r<17||r>41)continue;const g=Math.atan2(dy,dx)*57.2958;if(g<lo||g>hi)continue;const f=(g-lo)/w,age=a1>a0?f:1-f;px(ox+dx,oy+dy,col,age*age*.85*Math.min(1,(r-17)/14))}}
+function slash(bx,by,dt){const Sw=SWORDS[cur],sp=SWS[Sw.s],u=mu,ox=bx+58,oy=by+46,A=ANG[cur],tt=performance.now()/1000;GBX=bx;GBY=by;
+ if(Sw.sp&&u>=.05&&u<.34){const H=Sw.H;let h,spin=0;if(u<.2){const s=(u-.05)/.15;h=H*(1-(1-s)*(1-s))}else if(u<.24)h=H;else{const s=(u-.24)/.1;h=H*(1-s*s);spin=720*s}
+  const c=Math.cos(-15*Math.PI/180),s2=Math.sin(-15*Math.PI/180);dp(sp,ox+11*c+10*s2,oy+11*s2-10*c-h,8,8,-15+spin)}
+ else{const a=A(u);if(Sw.trail)trailArc(ox,oy,A(Math.max(0,u-.08/Sw.c)),a,Sw.trail);dp(sp,ox,oy,2.5,13,a+45)}
+ if(Sw.sp&&u>.4&&Math.random()<.3)PART.push({x:bx-4+Math.random()*76,y:by-4+Math.random()*66,vx:0,vy:-8,l:.3,c:Sw.sc[Math.random()*Sw.sc.length|0]});
+ if((cur==='espada de netherite'&&u>.56&&u<.97)||(cur==='espada de ouro'&&u>.83&&u<.98)){const g=(tt*1.3)%1,aa=A(u)*Math.PI/180,gx=ox+(10+26*g)*Math.cos(aa),gy=oy+(10+26*g)*Math.sin(aa);[[0,0],[-2,0],[2,0],[0,-2],[0,2]].forEach(([x,y])=>px(gx+x,gy+y,'#ffffff',g<.9?1:.4))}
+ if((cur==='espada de cobre'&&u>.3&&u<.95)||(cur==='espada de ouro'&&u>.3&&u<.8))gl(QM,bx+46,by+Math.round(Math.sin(tt*4)*2),'#8b7bff');
+ PART=PART.filter(p=>{p.l+=dt;p.vy+=90*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.l<.7){px(p.x,p.y,p.c,1-p.l/.7,2,2);return true}return false})}
+const HEART=['........','.##..##.','########','########','########','.######.','..####..','...##...'];
+const GZ4=['####','..#.','.#..','####'],GZ5=['#####','...#.','..#..','.#...','#####'];
+const HRT=['.#.#.','#####','.###.','..#..'];
+const VEIN=['##.##','#...#','.....','#...#','##.##'];
+const QM=['.###.','#...#','....#','..##.','..#..','.....','..#..'];
+function px(x,y,c,a,w,h){X.globalAlpha=a==null?1:a;X.fillStyle=c;X.fillRect(Math.round(x),Math.round(y),w||1,h||1)}
+function gl(G,x,y,c,a){G.forEach((r,j)=>{for(let i=0;i<r.length;i++)if(r[i]==='#')px(x+i*2,y+j*2,c,a,2,2)})}
+/* mascara da bolha */
+const MASK=[];for(let y=0;y<64;y++)for(let x=0;x<64;x++){const dx=Math.max(Math.abs(x-31.5)-7,0),dy=Math.max(Math.abs(y-31.5)-7,0),d=Math.hypot(dx,dy);if(d<=24.5)MASK.push([x,y,d>22.1])}
+/* olho 8x8 */
+function eye(side,o,t,x0,y0){
+ const useH=S.ht>.5,useX=S.xx>.5&&!useH,useC=S.ch>.5&&!useH&&!useX,useA=S.arc>.5&&!useC&&!useH&&!useX;
+ const rx=Math.min(4,3.3*S.es),ry=Math.max(.7,Math.min(4,3.3*S.es*o)),sl=Math.tan(S.la*Math.PI/180),lcY=3.5-ry+S.lc*2*ry;
+ for(let Y=0;Y<16;Y++)for(let U=0;U<16;U++){
+  const u=(U+.5)/2-.5,y=(Y+.5)/2-.5;let on=false;
+  if(useH){const hx=(U-7.5)/7.5*1.15,hy=1.25-Y/15*2.25;on=Math.pow(hx*hx+hy*hy-1,3)-hx*hx*Math.pow(hy,3)<=0}
+  else if(useX){const dx=u-3.5,dy=y-3.5,r=Math.hypot(dx,dy),k=r*.75+(side<0?1:-1)*Math.atan2(dy,dx)/6.283-t*1.4;on=r<=4.3&&(((k%1)+1)%1)<.5}
+  else if(useC){const xc=1.2+(3.5-Math.abs(y-3.5))*1.5;on=Math.abs(u-xc)<=.95&&y>=.4&&y<=6.6}
+  else if(useA){const ya=5.3-3.2*(1-Math.pow((u-3.5)/4.2,2));on=Math.abs(y-ya)<=.95}
+  else{on=Math.pow((u-3.5)/rx,2)+Math.pow((y-3.5)/ry,2)<=1.08;
+   if(on&&y+.5<lcY+sl*(u-3.5))on=false;
+   if(on&&cb>.01&&y>6.8-cb*8*(1-Math.pow((u-3.5)/5,2)))on=false}
+  if(on)px(x0+(side<0?U:15-U),y0+Y,useH?'#ff3d7f':INK)}
+}
+/* boca 16x8 */
+function mouth(x0,y0){
+ const hw=Math.min(16,Math.max(3,S.mw*.68)),mo=Math.max(0,S.mo);
+ for(let x=0;x<32;x++){const s=(x-15.5)/hw;if(Math.abs(s)>1.05)continue;
+  const c=Math.max(0,1-s*s),top=5.2+S.ms*3.8*c-s*S.msk*.8,bot=top+mo*6.8*(.35+.65*c);
+  for(let y=0;y<16;y++)if(y>=top-1.6&&y<=Math.max(top,bot)+1.6)px(x0+x,y0+y,INK)}
+}
+/* ===== pá · enxada · machado ===== */
+/* sprites de pá · enxada · machado, extraídos dos PNGs (16×16) do Item_bedrock.zip; enxada e machado invertidos horizontalmente */
+const SP2={
+  /* pá */
+  p:{
+    wooden:{r:[
+    "................",
+    "................",
+    "...........bba..",
+    "..........bggca.",
+    ".........bgdcga.",
+    "........bgdcdga.",
+    ".........ecdga..",
+    "........ehiga...",
+    ".......ehi.a....",
+    "......efi.......",
+    ".....ehi........",
+    "....efi.........",
+    "..eehi..........",
+    "..ehi...........",
+    "...ii...........",
+    "................"
+  ],p:{"a": "#20180a", "b": "#372910", "c": "#6b511f", "d": "#755821", "g": "#866526", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    stone:{r:[
+    "................",
+    "................",
+    "...........bba..",
+    "..........bggca.",
+    ".........bgdcga.",
+    "........bgdcdga.",
+    ".........ecdga..",
+    "........ehiga...",
+    ".......ehi.a....",
+    "......efi.......",
+    ".....ehi........",
+    "....efi.........",
+    "..eehi..........",
+    "..ehi...........",
+    "...ii...........",
+    "................"
+  ],p:{"a": "#181818", "b": "#494949", "c": "#7f7f7f", "d": "#898989", "g": "#9a9a9a", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    copper:{r:[
+    "................",
+    "................",
+    "...........ddb..",
+    "..........dmmkb.",
+    ".........dmlkmb.",
+    "........dmlklmb.",
+    ".........cklmb..",
+    "........cjamb...",
+    ".......cja.b....",
+    "......cga.......",
+    ".....cja........",
+    "....cga.........",
+    "..ccja..........",
+    "..cja...........",
+    "...aa...........",
+    "................"
+  ],p:{"a": "#271e0b", "b": "#411c11", "c": "#483515", "d": "#5e2b1c", "g": "#674d1e", "j": "#876627", "k": "#d36c47", "l": "#e0806b", "m": "#f99780"}},
+    iron:{r:[
+    "................",
+    "................",
+    "...........bba..",
+    "..........bggca.",
+    ".........bgdcga.",
+    "........bgdcdga.",
+    ".........ecdga..",
+    "........ehiga...",
+    ".......ehi.a....",
+    "......efi.......",
+    ".....ehi........",
+    "....efi.........",
+    "..eehi..........",
+    "..ehi...........",
+    "...ii...........",
+    "................"
+  ],p:{"a": "#181818", "b": "#444444", "c": "#c1c1c1", "d": "#d8d8d8", "g": "#ffffff", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    golden:{r:[
+    "................",
+    "................",
+    "...........bba..",
+    "..........bggca.",
+    ".........bgdcga.",
+    "........bgdcdga.",
+    ".........ecdga..",
+    "........ehiga...",
+    ".......ehi.a....",
+    "......efi.......",
+    ".....ehi........",
+    "....efi.........",
+    "..eehi..........",
+    "..ehi...........",
+    "...ii...........",
+    "................"
+  ],p:{"a": "#3f2e0e", "b": "#825d16", "c": "#e9b115", "d": "#eaee57", "g": "#fdff76", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    diamond:{r:[
+    "................",
+    "................",
+    "...........bba..",
+    "..........bggca.",
+    ".........bgdcga.",
+    "........bgdcdga.",
+    ".........ecdga..",
+    "........ehiga...",
+    ".......ehi.a....",
+    "......efi.......",
+    ".....ehi........",
+    "....efi.........",
+    "..eehi..........",
+    "..ehi...........",
+    "...ii...........",
+    "................"
+  ],p:{"a": "#17172d", "b": "#0e3f36", "c": "#27b29a", "d": "#2bc7ac", "g": "#33ebcb", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    netherite:{r:[
+    "................",
+    "................",
+    "...........ccc..",
+    "..........coooa.",
+    ".........commna.",
+    "........cnmkmna.",
+    ".........bkmna..",
+    "........blana...",
+    ".......bla.a....",
+    "......bga.......",
+    ".....bda........",
+    "....bda.........",
+    "..bbja..........",
+    "..bla...........",
+    "...aa...........",
+    "................"
+  ],p:{"a": "#231012", "b": "#2e2122", "c": "#49283f", "d": "#3a383a", "g": "#5f3331", "j": "#423f42", "k": "#4e3b3d", "l": "#724442", "m": "#5c555c", "n": "#6f666f", "o": "#847a84"}}
+  },
+  /* enxada */
+  h:{
+    wooden:{r:[
+    "................",
+    "......bbb.......",
+    ".....bjjkb......",
+    "..dcbjgaa.......",
+    "..akgga.........",
+    "..agjc..........",
+    "...aadc.........",
+    ".....akc........",
+    "......adc.......",
+    ".......akc......",
+    "........adc.....",
+    ".........akc....",
+    "..........adc...",
+    "...........akc..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#20180a", "b": "#362810", "c": "#483515", "d": "#674d1e", "g": "#6a501f", "j": "#745721", "k": "#876626"}},
+    stone:{r:[
+    "................",
+    "......bbb.......",
+    ".....bddgb......",
+    "..febdcaa.......",
+    "..ahcca.........",
+    "..acde..........",
+    "...aafe.........",
+    ".....ahe........",
+    "......afe.......",
+    ".......ahe......",
+    "........afe.....",
+    ".........ahe....",
+    "..........afe...",
+    "...........ahe..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#181818", "b": "#494949", "c": "#7f7f7f", "d": "#898989", "g": "#9a9a9a", "e": "#493615", "f": "#684e1e", "h": "#896727"}},
+    copper:{r:[
+    "................",
+    "......ddd.......",
+    ".....dllmd......",
+    "..gcdlkbb.......",
+    "..ajkkb.........",
+    "..bklc..........",
+    "...bagc.........",
+    ".....ajc........",
+    "......agc.......",
+    ".......ajc......",
+    "........agc.....",
+    ".........ajc....",
+    "..........agc...",
+    "...........ajc..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#271e0b", "b": "#411c11", "c": "#483515", "d": "#5e2b1c", "g": "#674d1e", "j": "#876627", "k": "#d36c47", "l": "#e0806b", "m": "#f99780"}},
+    iron:{r:[
+    "................",
+    "......bbb.......",
+    ".....bddgb......",
+    "..febdcaa.......",
+    "..ahcca.........",
+    "..acde..........",
+    "...aafe.........",
+    ".....ahe........",
+    "......afe.......",
+    ".......ahe......",
+    "........afe.....",
+    ".........ahe....",
+    "..........afe...",
+    "...........ahe..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#181818", "b": "#444444", "c": "#c1c1c1", "d": "#d8d8d8", "g": "#ffffff", "e": "#493615", "f": "#684e1e", "h": "#896727"}},
+    golden:{r:[
+    "................",
+    "......bbb.......",
+    ".....bddgb......",
+    "..febdcaa.......",
+    "..ahcca.........",
+    "..acde..........",
+    "...aafe.........",
+    ".....ahe........",
+    "......afe.......",
+    ".......ahe......",
+    "........afe.....",
+    ".........ahe....",
+    "..........afe...",
+    "...........ahe..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#3f2e0e", "b": "#825d16", "c": "#e9b115", "d": "#eaee57", "g": "#fdff76", "e": "#493615", "f": "#684e1e", "h": "#896727"}},
+    diamond:{r:[
+    "................",
+    "......ccc.......",
+    ".....cllmc......",
+    "..gdclkaa.......",
+    "..bjkka.........",
+    "..akld..........",
+    "...abgd.........",
+    ".....bjd........",
+    "......bgd.......",
+    ".......bjd......",
+    "........bgd.....",
+    ".........bjd....",
+    "..........bgd...",
+    "...........bjd..",
+    "............bb..",
+    "................"
+  ],p:{"a": "#082520", "b": "#271e0b", "c": "#0e3e35", "d": "#483515", "g": "#674d1e", "j": "#876627", "k": "#27b098", "l": "#2ac5aa", "m": "#32e8c9"}},
+    netherite:{r:[
+    "................",
+    "......ddd.......",
+    ".....dpppd......",
+    "..jbcpoaa.......",
+    "..amona.........",
+    "..alnb..........",
+    "...aajb.........",
+    ".....amb........",
+    "......ajb.......",
+    ".......amb......",
+    "........akb.....",
+    ".........agb....",
+    "..........akb...",
+    "...........amb..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#1b1415", "b": "#2e2122", "c": "#312727", "d": "#49283d", "g": "#3a383a", "j": "#5f3331", "k": "#423f42", "l": "#4e3b3d", "m": "#724442", "n": "#5c555c", "o": "#6f666f", "p": "#847a84"}}
+  },
+  /* machado */
+  a:{
+    wooden:{r:[
+    "................",
+    ".....bb.........",
+    "....bjjb........",
+    "....bgdjb.......",
+    "...fedddjb......",
+    "...idcdgja......",
+    "..adcdeaa.......",
+    "..addife........",
+    "...aa.ihe.......",
+    ".......ife......",
+    "........ife.....",
+    ".........ihe....",
+    "..........ife...",
+    "...........ihe..",
+    "............ii..",
+    "................"
+  ],p:{"a": "#20180a", "b": "#372910", "c": "#594319", "d": "#6b511f", "g": "#755821", "j": "#866526", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    stone:{r:[
+    "................",
+    ".....bb.........",
+    "....bjjb........",
+    "....bgdjb.......",
+    "...fedddjb......",
+    "...idcdgja......",
+    "..adcdeaa.......",
+    "..addife........",
+    "...aa.ihe.......",
+    ".......ife......",
+    "........ife.....",
+    ".........ihe....",
+    "..........ife...",
+    "...........ihe..",
+    "............ii..",
+    "................"
+  ],p:{"a": "#181818", "b": "#494949", "c": "#6c6c6c", "d": "#7f7f7f", "g": "#898989", "j": "#9a9a9a", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    copper:{r:[
+    "................",
+    ".....dd.........",
+    "....dnnd........",
+    "....dmlnd.......",
+    "...gclllnd......",
+    "...aljlmnb......",
+    "..bljlcbb.......",
+    "..bllagc........",
+    "...bb.akc.......",
+    ".......agc......",
+    "........agc.....",
+    ".........akc....",
+    "..........agc...",
+    "...........akc..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#271e0b", "b": "#411c11", "c": "#483515", "d": "#5e2b1c", "g": "#674d1e", "j": "#9a4d30", "k": "#876627", "l": "#d36c47", "m": "#e0806b", "n": "#f99780"}},
+    iron:{r:[
+    "................",
+    ".....bb.........",
+    "....bjjb........",
+    "....bgdjb.......",
+    "...fedddjb......",
+    "...idcdgja......",
+    "..adcdeaa.......",
+    "..addife........",
+    "...aa.ihe.......",
+    ".......ife......",
+    "........ife.....",
+    ".........ihe....",
+    "..........ife...",
+    "...........ihe..",
+    "............ii..",
+    "................"
+  ],p:{"a": "#181818", "b": "#444444", "c": "#969696", "d": "#c1c1c1", "g": "#d8d8d8", "j": "#ffffff", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    golden:{r:[
+    "................",
+    ".....bb.........",
+    "....bggb........",
+    "....bdcgb.......",
+    "...fecccgb......",
+    "...icccdga......",
+    "..accceaa.......",
+    "..accife........",
+    "...aa.ihe.......",
+    ".......ife......",
+    "........ife.....",
+    ".........ihe....",
+    "..........ife...",
+    "...........ihe..",
+    "............ii..",
+    "................"
+  ],p:{"a": "#3f2e0e", "b": "#825d16", "c": "#e9b115", "d": "#eaee57", "g": "#fdff76", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    diamond:{r:[
+    "................",
+    ".....bb.........",
+    "....bjjb........",
+    "....bgdjb.......",
+    "...fedddjb......",
+    "...idcdgja......",
+    "..adcdeaa.......",
+    "..addife........",
+    "...aa.ihe.......",
+    ".......ife......",
+    "........ife.....",
+    ".........ihe....",
+    "..........ife...",
+    "...........ihe..",
+    "............ii..",
+    "................"
+  ],p:{"a": "#17172d", "b": "#0e3f36", "c": "#1e8a77", "d": "#27b29a", "g": "#2bc7ac", "j": "#33ebcb", "e": "#493615", "f": "#684e1e", "h": "#896727", "i": "#281e0b"}},
+    netherite:{r:[
+    "................",
+    ".....dd.........",
+    "....dppd........",
+    "....dllpd.......",
+    "...jnlllod......",
+    "...alnlloa......",
+    "..alclnaa.......",
+    "..allajb........",
+    "...aa.amb.......",
+    ".......ajb......",
+    "........akb.....",
+    ".........agb....",
+    "..........akb...",
+    "...........amb..",
+    "............aa..",
+    "................"
+  ],p:{"a": "#231012", "b": "#2e2122", "c": "#312727", "d": "#49283f", "g": "#3a383a", "j": "#5f3331", "k": "#423f42", "l": "#4e3b3d", "m": "#724442", "n": "#5c555c", "o": "#6f666f", "p": "#847a84"}}
+  }
+};
+const EF={esf:{la:16,lc:.3,mw:10,ms:-.6,mo:.1,tr:.4,ly:.2},cans:{la:-14,lc:.3,lo:.8,ro:.8,mw:11,ms:-.5,mo:.1,tr:.5,ly:.3}};
+const BONE=['##...##','.#####.','##...##'],EXC=['#','#','#','#','.','#'];
+let CP=[],ST={h:0};
+function ky(u,p){if(u<=p[0][0])return p[0][1];for(let i=1;i<p.length;i++)if(u<p[i][0]){const a=p[i-1],b=p[i];return L(a[1],b[1],E3((u-a[0])/(b[0]-a[0])))}return p[p.length-1][1]}
+const rp=(a,b,n,q)=>{const o=[],d=(b-a)/n;for(let i=0;i<n;i++)q.forEach(([f,v])=>o.push([a+d*(i+f),v]));return o};
+const hv=(a,b,n,f,t)=>Array.from({length:n},(_,i)=>[a+(b-a)/n*(i+f),t]);
+const bw=(a,b,n,lo,hi,r=0)=>{const o=[],d=(b-a)/n;for(let i=0;i<n;i++)o.push([a+d*i,lo+r*i/n*.5],[a+d*(i+.5),hi+r*i/n]);return o};
+const Q1=[[0,12],[.42,-38],[.68,72],[.82,66],[.98,28]],QH=[[0,12],[.45,-55],[.7,60],[.85,52],[.98,25]],QA=[[0,20],[.45,-50],[.7,42],[.85,36],[.98,22]];
+const GC=['#fcdf4b','#ffffc8','#e6af15'],DC=['#7ff3ff','#c9fbff','#2fd8e8'],NC=['#ff7a1a','#ffb347','#ff4a1a','#4a3a3a'];
+const CT={},def=(n,k,s,o)=>{CT[n]={k,s,...o}};
+/* PÁ */
+def('pá de madeira','p','wooden',{c:5,A:[...rp(.04,.7,3,Q1),[.75,40],[.8,66],[.85,40],[.9,66],[.96,20],[.99,12]],V:[...hv(.04,.7,3,.68,'h'),[.8,'h'],[.9,'h']],F:[[0,'esf'],[.7,'feliz'],[.9,'alegria']]});
+def('pá de pedra','p','stone',{c:6,A:[...rp(.04,.42,2,Q1),[.5,70],[.55,40],[.6,72],[.65,44],[.72,60],[.85,25],[.99,12]],V:hv(.04,.42,2,.68,'h'),I:['bone',.52,.86],L:[[.54,.86,0,-1.1]],F:[[0,'esf'],[.5,'espanto'],[.6,'curioso'],[.88,'feliz']]});
+def('pá de cobre','p','copper',{c:5.5,A:[...rp(.04,.5,2,Q1),[.55,70],[.62,40],[.8,20],[.99,12]],V:hv(.04,.5,2,.68,'h'),I:['coin',.55,.92],L:[[.58,.9,0,-1]],F:[[0,'esf'],[.55,'espanto'],[.64,'apaixonado'],[.9,'feliz']]});
+def('pá de ferro','p','iron',{c:3.6,A:[...rp(.03,.62,5,Q1),[.7,-15],[.8,-25],[.92,-25],[.99,12]],V:hv(.03,.62,5,.68,'h'),gt:[[.7,.95]],F:[[0,'esf'],[.65,'maroto'],[.85,'piscadela'],[.95,'feliz']]});
+def('pá de ouro','p','golden',{c:6,A:[...rp(.04,.45,2,Q1),[.5,70],[.6,40],[.7,-20],[.9,-24],[.99,12]],V:[...hv(.04,.45,2,.68,'h'),[.77,'sk']],I:['nug',.5,.77],sc:GC,L:[[.72,.98,.9,-.5]],gt:[[.62,.98]],F:[[0,'esf'],[.5,'espanto'],[.6,'apaixonado'],[.77,'curioso'],[.92,'maroto']]});
+def('pá de diamante','p','diamond',{c:5,A:[[0,12],[.05,-30],[.12,70],[.18,20],[.24,-30],[.3,72],[.36,20],[.44,0],[.62,720],[.622,0],[.66,-25],[.74,75],[.78,60],[.9,-20],[.99,12]],V:[[.12,'h'],[.3,'h'],[.74,'D'],[.74,'sk']],sc:DC,fx:[[.76,.98,'cy']],gt:[[.44,.62]],F:[[0,'esf'],[.42,'maroto'],[.74,'espanto'],[.8,'alegria']]});
+def('pá de netherite','p','netherite',{c:6,A:[[0,10],[.1,-45],[.22,72],[.3,40],[.4,-50],[.52,74],[.6,50],[.66,-55],[.76,78],[.82,70],[.95,30],[.99,10]],V:[[.22,'h'],[.52,'h'],[.76,'D'],[.76,'sk']],sc:NC,fx:[[.78,.98,'bem']],F:[[0,'esf'],[.3,'bravo'],[.76,'espanto'],[.84,'maroto']]});
+/* ENXADA */
+def('enxada de madeira','h','wooden',{c:5,A:[...rp(.04,.84,4,QH),[.99,12]],V:hv(.04,.84,4,.7,'h'),F:[[0,'esf'],[.85,'feliz']]});
+def('enxada de pedra','h','stone',{c:6.5,A:[...rp(.04,.8,3,QH),[.99,12]],V:[...hv(.04,.8,3,.7,'h'),[.3,'sw'],[.72,'sw']],F:[[0,'cans'],[.82,'entediado'],[.95,'feliz']]});
+def('enxada de cobre','h','copper',{c:6,A:[...rp(.04,.5,2,QH),[.55,50],[.62,-5],[.9,-5],[.99,12]],V:hv(.04,.5,2,.7,'h'),I:['spr',.58,1],L:[[.58,.85,.4,.7]],F:[[0,'esf'],[.52,'curioso'],[.72,'apaixonado'],[.9,'feliz']]});
+def('enxada de ferro','h','iron',{c:4.2,A:[...rp(.03,.5,4,QH),[.55,-5],[.62,-35],[.95,-35],[.99,12]],V:hv(.03,.5,4,.7,'h'),gt:[[.58,.96]],L:[[.62,.95,.95,-.6]],F:[[0,'esf'],[.5,'curioso'],[.64,'maroto'],[.9,'feliz']]});
+def('enxada de ouro','h','golden',{x:'hg',c:8,A:[[0,12],[.04,-55],[.1,60],[.16,25],[.2,-55],[.26,60],[.31,30],[.4,35],[.48,-25],[.55,-30],[.7,-26],[.74,-26],[.76,0],[.99,12]],V:[[.1,'h'],[.26,'h'],[.38,'sk',79,35],[.74,'sm',70,34]],sc:GC,vn:.8,L:[[.46,.74,.9,-.4]],F:[[0,'esf'],[.3,'espanto'],[.4,'confuso'],[.74,'espanto'],[.8,'furioso']]});
+def('enxada de diamante','h','diamond',{c:5,A:[...rp(.03,.55,6,QH),[.6,0],[.78,720],[.782,0],[.86,-30],[.99,12]],V:[...hv(.03,.55,6,.7,'h'),[.78,'sk',72,30]],sc:DC,fx:[[.03,.95,'cy']],F:[[0,'esf'],[.55,'alegria'],[.8,'maroto']]});
+def('enxada de netherite','h','netherite',{c:6,A:[...rp(.04,.6,4,QH),[.65,-40],[.8,-40],[.99,12]],V:[...hv(.04,.6,4,.7,'h'),[.65,'sk']],sc:NC,I:['srw',.62,1],fx:[[.04,.7,'bem']],L:[[.66,.9,.4,.7]],F:[[0,'bravo'],[.64,'maroto'],[.88,'feliz']]});
+/* MACHADO */
+def('machado de madeira','a','wooden',{c:5,A:[...rp(.04,.75,3,QA),[.99,22]],V:[...hv(.04,.75,3,.7,'h'),[.8,'lf'],[.84,'lf']],L:[[.82,.98,0,-1]],F:[[0,'esf'],[.8,'curioso'],[.93,'feliz']]});
+def('machado de pedra','a','stone',{c:6.5,A:[...rp(.04,.78,3,QA),[.99,22]],V:[...hv(.04,.78,3,.7,'h'),[.3,'sw'],[.72,'sw']],F:[[0,'cans'],[.8,'entediado'],[.95,'feliz']]});
+def('machado de cobre','a','copper',{c:6,A:[...rp(.04,.62,3,QA),[.68,40],[.74,-40],[.85,-40],[.99,22]],V:[...hv(.04,.62,3,.7,'h'),[.64,'D']],spl:[[.64,0],[.9,1]],F:[[0,'esf'],[.62,'espanto'],[.74,'alegria']]});
+def('machado de ferro','a','iron',{nb:1,c:4.5,A:[[0,-10],[.06,-35],[.3,-35],[.34,-70],...bw(.4,.88,6,-70,50),[.92,-30],[.99,-10]],tr:'#ffffff',gt:[[.06,.32],[.4,.9]],L:[[.08,.32,.9,-.7]],F:[[0,'curioso'],[.34,'maroto'],[.9,'feliz']]});
+def('machado de ouro','a','golden',{nb:1,x:'ag',c:7,A:[[0,-10],[.06,-35],[.28,-35],[.32,-70],...bw(.36,.68,4,-70,45),[.7,45],[.8,32],[.95,28],[.99,-10]],tr:'#ffe14a',gt:[[.06,.3],[.36,.7]],L:[[.08,.3,.9,-.7]],V:[[.72,'sk',68,46]],sc:GC,F:[[0,'curioso'],[.32,'maroto'],[.7,'espanto'],[.84,'confuso'],[.93,'triste']]});
+def('machado de diamante','a','diamond',{nb:1,c:4.6,Z:[.05,.3],ZA:[[.05,0],[.3,1080]],ZY:[[.05,0],[.17,-52],[.3,0]],A:[[0,-10],[.3,-25],[.46,-25],...bw(.5,.92,12,-65,50,22),[.97,-20],[.99,-10]],tr:'#bff8ff',sc:DC,fx:[[.5,.92,'cy']],gt:[[.3,.48]],V:[[.05,'sq'],[.3,'sk',70,34]],L:[[.06,.28,0,-1.3]],F:[[0,'curioso'],[.05,'alegria'],[.3,'maroto'],[.48,'bravo'],[.93,'feliz']]});
+def('machado de netherite','a','netherite',{nb:1,c:5.4,Z:[.05,.34],ZA:[[.05,0],[.34,1440]],ZY:[[.05,0],[.18,-56],[.34,0]],A:[[0,-10],[.34,-25],[.5,-25],...bw(.54,.95,16,-65,52,26),[.98,-20],[.99,-10]],tr:'#ffb347',sc:NC,fx:[[.54,.95,'em']],gt:[[.34,.52]],V:[[.05,'sq'],[.34,'sk',70,34],[.34,'sq']],L:[[.06,.32,0,-1.3]],F:[[0,'curioso'],[.05,'alegria'],[.34,'maroto'],[.52,'bravo'],[.94,'maroto']]});
+for(const n in CT){E[n]={mw:11,ms:.2,mo:0};MC.push(n);const b=document.createElement('button');b.textContent=n;b.dataset.n=n;b.onclick=()=>set(n,1);g.appendChild(b)}
+function hc(th,ox,oy,dx,dy){const r=th*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return[ox+dx*c-dy*s,oy+dx*s+dy*c]}
+function hcTool(th,ox,oy,dx,dy,PX){const r=th*Math.PI/180,c=Math.cos(r),s=Math.sin(r),px0=PX*2,py0=13.5*2,x=dx-px0,y=dy-py0;return[ox+px0+x*c-y*s,oy+py0+x*s+y*c]}
+function gt(x,y,a){[[0,0],[-1,0],[1,0],[0,-1],[0,1]].forEach(([i,j])=>px(x+i,y+j,'#fff',a));[[-2,0],[2,0],[0,-2],[0,2]].forEach(([i,j])=>px(x+i,y+j,'#fff',a*.5))}
+function pb(x,y,cols,n,v){for(let i=0;i<n;i++)CP.push({x,y,vx:(Math.random()*2-1)*v,vy:-Math.random()*v*1.3,l:0,L:.7,c:cols[i%cols.length],z:2})}
+function EV(ty,ex,ey,C){const bx=GBX,by=GBY,k=C.k,IP={p:[90,54],h:[88,46],a:[86,42]}[k],X0=bx+(ex==null?IP[0]:ex),Y0=by+(ey==null?IP[1]:ey),
+ cl=k==='a'?['#7a5a30','#6b4f2a','#8a6838','#4d381b']:['#7a5230','#6b4524','#8a6038','#5e3b1e'];
+ if(ty==='h'){ST.h++;sqv+=.1;pb(X0,Y0,cl,6,20)}
+ else if(ty==='D'){sqv+=.12;pb(X0,Y0,cl,12,34)}
+ else if(ty==='sq')sqv+=.16;
+ else if(ty==='sk'){sqv+=.08;pb(X0,Y0,[...C.sc,'#ffffff'],14,36)}
+ else if(ty==='sw')CP.push({x:bx+50,y:by+8,vx:0,vy:6,l:0,L:1.2,c:'#7cc8ff',z:2,g:60});
+ else if(ty==='lf')CP.push({x:bx+20+Math.random()*30,y:by-10,vx:6,vy:5,l:0,L:1.6,c:'#4caf50',z:2,g:14});
+ else if(ty==='sm')for(let i=0;i<12;i++){const r=Math.random();CP.push({x:X0+r*6-3,y:Y0+Math.random()*6-3,vx:(r-.5)*18,vy:-6-Math.random()*14,l:0,L:.9,c:['#f2f2f2','#cfcfcf','#a8a8a8'][i%3],z:3,g:-6})}}
+function blk(k,x,y,h,sp){const g=['#7a5230','#6b4524','#8a6038','#5e3b1e','#74502c'],w=['#7a5a30','#6b4f2a','#8a6838','#5c4322','#654826'];
+ for(let j=0;j<14;j++)for(let i=0;i<14;i++){let c;
+  if(k==='a'){c=w[(i*3+(j>>2))%5];if(h>0&&j>2&&j<11&&i<h*2-Math.abs(j-6))c='#3b2a14'}
+  else if(k==='h')c=j<4?(h>j?(j%2?'#4a2f1a':'#3c2414'):'#5fa339'):g[(i*7+j*13+i*j*3)%5];
+  else c=(h>0&&j<Math.min(h,3)*2&&i>3&&i<10)?'#3a2412':j<3?(i%3?'#5fa339':'#4f8f2e'):g[(i*7+j*13+i*j*3)%5];
+  if(i==0||j==13||i==13)c='#3d2c16';
+  px(x+i+(sp?(i<7?-1:1)*sp*10:0),y+j,c,1-sp)}}
+function item(t,p,X,Y,bx,by,tt){const yy=Y-6-30*Math.sin(Math.PI*p);
+ if(t==='bone'){gl(BONE,X+1,yy,'#f4efdc');if(p>.1&&p<.8)gl(EXC,bx+52,by-4,'#ffcc33')}
+ else if(t==='coin'||t==='nug'){const w=Math.abs(Math.cos(p*28))*3.2+.8,c=t==='coin'?['#e0806b','#f99780']:['#e6af15','#fcdf4b'];
+  for(let j=-3;j<=3;j++)for(let i=-4;i<=4;i++)if((i/w)*(i/w)+(j/3.3)*(j/3.3)<=1)px(X+5+i,yy+j,i<0?c[1]:c[0]);gt(X+8,yy-5,.5+.5*Math.sin(tt*16))}
+ else{const h=Math.min(9,p*12),c=t==='spr'?['#4caf50','#2e7d32']:['#c0262d','#7a1114'],sx=Math.sin(tt*28)*(t==='srw'?.6:0);px(X+5+sx,Y-h,c[1],1,2,h);if(h>4){px(X+2+sx,Y-h+1,c[0],1,3,2);px(X+7+sx,Y-h,c[0],1,3,2)}}}
+function tipOf(sp,ox,oy,deg,qx){let best=null,bd=-1;for(let y=0;y<16;y++)for(let x=0;x<16;x++){const q=sp.r[y][x];if(q==='.'||'efhi'.includes(q))continue;const d=Math.hypot(x-qx,y-13.5);if(d>bd){bd=d;best=[x,y]}}const th=Math.round(deg/15)*15*Math.PI/180,c=Math.cos(th),s2=Math.sin(th),a=best[0]-qx,b=best[1]-13.5;return[Math.round(ox+2*a*c-2*b*s2),Math.round(oy+2*a*s2+2*b*c)]}
+function ctool(bx,by,dt){
+ const C=CT[cur],sp=SP2[C.k][C.s],u=mu,k=C.k,PX=k==='p'?3:12,ox=bx+(k==='h'||k==='a'?58:52),oy=by+46,tt=performance.now()/1000;GBX=bx;GBY=by;
+ const BP={p:[84,54],h:[84,54],a:[82,36]}[k],BX=bx+BP[0],BY=by+BP[1],rawTh=ky(u,C.A),th=rawTh+(k==='p'?0:80),tossing=C.Z&&u>=C.Z[0]&&u<C.Z[1];
+ if(!C.nb)blk(k,BX,BY,Math.min(ST.h,4),C.spl?ky(u,C.spl):0);
+ if(C.I&&u>=C.I[1]&&u<C.I[2])item(C.I[0],(u-C.I[1])/(C.I[2]-C.I[1]),BX,BY,bx,by,tt);
+ const tr=()=>{if(!C.tr||tossing)return;const a=ST.tl||(ST.tl=[]),tp=tipOf(sp,ox,oy,th,PX);if(ST.pth!==undefined&&Math.abs(th-ST.pth)>2)a.push(tp);else if(a.length)a.shift();if(a.length>14)a.shift();ST.pth=th;a.forEach((q,i)=>{const al=(i+1)/a.length*.95;for(let dx=0;dx<3;dx++)for(let dy=0;dy<3;dy++)px(q[0]+dx-1,q[1]+dy-1,C.tr,al*(dx==1&&dy==1?1:.45))})};
+ if(tossing)dp(sp,ox+12,oy-10+ky(u,C.ZY),8,8,ky(u,C.ZA));
+ else if(C.x==='hg'){
+  if(u<.38){const sh=u>=.3?Math.sin(tt*60)*1.2:0;dp(sp,ox,oy+sh,PX,13.5,th);if(u>=.3){const[cx,cy]=hc(th,ox,oy+sh,11,-21,PX);[[-2,-1],[-1,0],[0,1],[1,0],[2,2],[1,3]].forEach(([i,j])=>px(cx+i*2,cy+j*2,'#3a2a08'))}}
+  else if(u<.74){const t0=ky(.38,C.A),[cx,cy]=hc(t0,ox,oy,11,-21,PX),t=(u-.38)*C.c;
+   dp(sp,ox,oy,PX,13.5,th,(x,y,q)=>'efhi'.includes(q));
+   [[-1,6.5],[1,10.5]].forEach(([s,qx])=>{const py=cy+120*t*t;if(py<130)dp(sp,cx+s*26*t,py,qx,3.5,t0+s*t*260,(x,y,q)=>!'efhi'.includes(q)&&(s<0?x<=8:x>8))})}}
+ else if(C.x==='ag'){
+  const TB=.72,TS=.86,TV=.91,[bpx,bpy]=hcTool(th,ox,oy,7,-7.4,PX);
+  if(u<TB){tr();dp(sp,ox,oy,PX,13.5,th)}
+  else{dp(sp,ox,oy,PX,13.5,th,(x,y)=>y>=10);
+   if(u<TV){let fx=0,fy=3,r=ky(u,[[TB,0],[TB+.04,115],[.79,138],[.82,126],[TS,134]]);
+    if(u<TS){r+=Math.sin(tt*9)*5;for(let j=0;j<3;j++)px(bpx,bpy+j,'#d8b878')}
+    else{const t=(u-TS)*C.c;fx=-14*t;fy=3+130*t*t;r+=t*320}
+    ST.px=bpx+fx;ST.py=bpy+fy+10;
+    dp(sp,bpx+fx,bpy+fy,(k==='a'?8.5:6.5),9.8,th+r,(x,y)=>y<=9)}
+   else if(!ST.v){ST.v=1;EV('sm',ST.px-bx,ST.py-by,C)}}}
+ else{tr();dp(sp,ox,oy,PX,13.5,th)}
+ for(const[a,b]of C.gt||[])if(u>=a&&u<b){const[cx,cy]=hcTool(th,ox,oy,16+Math.sin(tt*5)*6,-21+Math.cos(tt*4)*5,PX);gt(cx,cy,.5+.5*Math.sin(tt*14))}
+ for(const[a,b,ty]of C.fx||[])if(u>=a&&u<b&&Math.random()<.6){
+  if(ty==='bem')CP.push({x:BX+Math.random()*14,y:BY,vx:(Math.random()-.5)*10,vy:-14-Math.random()*20,l:0,L:.8,c:NC[Math.random()*4|0],z:2,g:-8});
+  else{const[x,y]=hcTool(th,ox,oy,12+Math.random()*10,-21+Math.random()*12,PX);
+   if(ty==='cy')CP.push({x,y,vx:0,vy:-6,l:0,L:.5,c:DC[Math.random()*3|0],z:2,g:0});
+   else CP.push({x,y,vx:(Math.random()-.5)*14,vy:-8-Math.random()*14,l:0,L:.7,c:NC[Math.random()*4|0],z:2,g:-8})}}
+ if(C.vn&&u>=C.vn)gl(VEIN,bx+46,by+4+(Math.sin(tt*12)>0?0:2),'#ff3b3b');
+ CP=CP.filter(p=>{p.l+=dt;p.vy+=(p.g==null?90:p.g)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.l<p.L){px(p.x,p.y,p.c,1-p.l/p.L,p.z||2,p.z||2);return true}return false})}
+let last=performance.now();set('feliz');showCat();let fl=1;
+function loop(now){
+  if(window.bubbleLastFrame && now-window.bubbleLastFrame<32){requestAnimationFrame(loop);return}
+  window.bubbleLastFrame=now;
+ const dt=Math.min(.033,(now-last)/1000);last=now;const t=now/1000;
+ if(auto){autoT+=dt;if(autoT>5){autoT=0;window.bubbleTurn=(window.bubbleTurn||0)+1;const ks=window.bubbleTurn%3===0?MC:Object.keys(E).filter(k=>!MC.includes(k));set(ks[Math.random()*ks.length|0])}}
+ nextBk-=dt;if(nextBk<0&&bkP<0)bkP=0;
+ if(bkP>=0){bkP+=dt/.18;if(bkP>=1){bkP=-1;nextBk=2.5+Math.random()*3.5}}
+ bk=bkP<0?1:1-Math.sin(Math.PI*bkP)*.96;
+ const tg={...T};
+ let pxx=Math.sin(t*.7)*.25+Math.sin(t*1.9)*.08,pyy=Math.cos(t*.9)*.12;
+ if(pt&&(down||now-ptT<8000)){const k=down?1:.45;pxx=pt.x*k;pyy=pt.y*k}
+ tg.lx=T.lx*.6+pxx;tg.ly=T.ly*.6+pyy;
+ gz+=(((pt&&(down||now-ptT<8000))?(down?1:.5):0)-gz)*Math.min(1,dt*6);
+ tg.msk=T.msk*(1-gz);tg.tilt=T.tilt*(1-gz*.85);tg.mx=T.mx*(1-gz)+pxx*2.5*gz;
+ if(cur==='sono'){tg.lo=T.lo+(.95-T.lo)*gz;tg.ro=T.ro+(.95-T.ro)*gz;tg.mo=T.mo*(1-gz);tg.lx=pxx;tg.ly=T.ly*(1-gz)*.5+pyy}
+ if(talk)tg.mo=Math.max(T.mo,(Math.sin(t*13)*.5+.5)*(.5+.4*Math.sin(t*3.1)));
+ const cs=Math.sin(t*9),ss=Math.sin(t*4.5);
+ if(cur==='mastigando'){tg.mo=.06+(cs*.5+.5)*.5;tg.mw=12+cs*2.5;tg.mx=ss*4*(1-gz)+pxx*2.5*gz;tg.msk=ss*2.5*(1-gz);tg.tilt+=ss*3*(1-gz);tg.ly+=cs*.07}
+ if(TOOLS[cur]){const Tl=TOOLS[cur],sp=Tl.sp;mu=(t%Tl.c)/Tl.c;if(rs){lastMu=mu;gone=false;hits=0;brk=0;PART.length=0;rs=0}if(mu<lastMu){gone=false;if(sp)hits=0}
+  for(const h of(sp?[.62,.7,.78]:[.66]))if(lastMu<h&&mu>=h)hit();
+  if(sp&&lastMu<.5&&mu>=.5){sqv+=.14;for(let i=0;i<12;i++)PART.push({x:GBX+68,y:GBY+36,vx:(Math.random()*2-1)*28,vy:-Math.random()*30,l:0,c:Tl.sc[i%Tl.sc.length]})}
+  lastMu=mu;const u=mu;tg.lx=.5+pxx*.5;tg.bl=0;
+  if(!sp){const wd=u<.55,hh=u>=.66&&u<.8;tg.ly=wd?-.3:.1;tg.la=wd?16:hh?0:6;tg.lc=wd?.3:hh?0:.12;tg.ch=hh?1:0;tg.mw=wd?9:12;tg.ms=wd?-.5:.2;tg.mo=hh?.5:0;tg.tilt=wd?-4:5}
+  else if(u<.06){tg.mw=14;tg.ms=.6;tg.mo=.1}
+  else if(u<.5){tg.ly=-1.3;tg.lx=0;tg.es=1.3;tg.lo=tg.ro=1.1;tg.mw=7;tg.ms=0;tg.mo=.9}
+  else if(u<.58){tg.arc=1;tg.mw=20;tg.ms=1;tg.mo=.4;tg.bl=1}
+  else if(u<.85){tg.ch=1;tg.mw=22;tg.ms=1;tg.mo=1;tg.bl=1;tg.tilt=6}
+  else{tg.arc=1;tg.mw=24;tg.ms=1;tg.mo=1.1;tg.bl=1;tg.tilt=8;tg.tr=.5;if(Math.random()<.08)sqv+=.04}
+ }
+ if(SWORDS[cur]){const Sw=SWORDS[cur],n=cur;mu=(t%Sw.c)/Sw.c;if(rs){lastMu=mu;PART.length=0;rs=0}const u=mu,wr=u<lastMu;
+  if(n==='espada de madeira'&&lastMu<.52&&u>=.52){sqv+=.12;burst(GBX+90,GBY+62,['#ffffff','#e8d9b0'],6,26)}
+  if(n==='espada de pedra'&&wr){sqv+=.16;burst(GBX+72,GBY+80,['#8e8e8e','#aaaaaa','#707070'],8,22)}
+  if(Sw.sp&&lastMu<.34&&u>=.34){sqv+=.14;burst(GBX+66,GBY+36,Sw.sc,12,30)}
+  lastMu=u;
+  if(n==='espada de madeira'){tg.lx=.5+pxx*.4;if(u>=.5&&u<.64)Object.assign(tg,{ch:1,mw:12,mo:1,ms:0,la:0,lc:0});else Object.assign(tg,{la:12,lc:.25,mw:9,ms:-.2,mo:0,ly:-.1})}
+  else if(n==='espada de pedra'){tg.lx=.5+pxx*.4;
+   if(u<.08||u>=.9)Object.assign(tg,{la:14,lc:.35,mw:8,ms:-.8,tr:.3,ly:.4,lo:.9,ro:.9});
+   else if(u<.5)Object.assign(tg,{ch:1,mw:9,ms:-.6,mo:.12,tr:.7,tilt:-5,ly:-.2});
+   else if(u<.58)Object.assign(tg,{arc:1,mw:13,ms:.3,mo:.5});
+   else{const w=Math.sin((u-.58)/.32*Math.PI*3);Object.assign(tg,{arc:1,mw:14,ms:.6,mo:.25,bl:.6,tilt:w*6});tg.lx=.5+w*.9}}
+  else if(n==='espada de ferro'){Object.assign(tg,E.maroto);tg.lx=.4+(u>.1&&u<.8?Math.sin((u-.1)/.7*Math.PI*8)*.9:0)+pxx*.3}
+  else if(n==='espada de ouro'){if(u<.3)Object.assign(tg,E.curioso);else if(u<.8){Object.assign(tg,E.confuso);if(u>.5)tg.lx=.4+Math.sin(u*40)*.7}else if(u<.98){Object.assign(tg,E.espanto);tg.ly=-.5;tg.lx=.9;tg.es=1.3}else Object.assign(tg,E.curioso)}
+  else if(n==='espada de cobre'){Object.assign(tg,u<.3?E.curioso:E.confuso);if(u>.5&&u<.95)tg.lx=.4+Math.sin(u*40)*.7}
+  else{
+   if(u<.05)Object.assign(tg,E.maroto);
+   else if(u<.34)Object.assign(tg,{ly:-1.4,lx:0,es:1.3,lo:1.1,ro:1.1,mw:7,ms:0,mo:.9});
+   else if(n==='espada de netherite'&&u>=.56&&u<.97){Object.assign(tg,E.espanto);tg.ly=-.5;tg.lx=.9;tg.es=1.3}
+   else{Object.assign(tg,E.maroto);tg.lx=.4+Math.sin(u*60)*.5}}
+ }
+ if(CT[cur]){const C=CT[cur];mu=(t%C.c)/C.c;if(rs){lastMu=mu;ST={h:0};CP=[];rs=0}if(mu<lastMu){ST={h:0};lastMu=-1}
+  for(const[eu,ty,ex,ey]of C.V||[])if(lastMu<eu&&mu>=eu)EV(ty,ex,ey,C);
+  lastMu=mu;let f=C.F[0][1];for(const[fu,fn]of C.F)if(mu>=fu)f=fn;
+  tg.lx=.5+pxx*.5;tg.bl=0;Object.assign(tg,E[f]||EF[f]);
+  for(const[a,b,x,y]of C.L||[])if(mu>=a&&mu<b){tg.lx=x;tg.ly=y}}
+ if(cur==='bocejando'){const u=(t%4.8)/4.8,e=x=>x*x*(3-2*x),v=u<.1?0:u<.35?e((u-.1)/.25):u<.62?1-.1*(u-.35)/.27:u<.85?e(1-(u-.62)/.23)*.9:0;tg.mo=1.15*v;tg.mw=10+v*2;tg.ms=0;tg.lo=tg.ro=1-.92*v;tg.ly=T.ly*(1-gz)+pyy-.35*v*(1-gz);tg.tilt=T.tilt*(1-gz)-5*v*(1-gz)}
+ if(cur==='boca fechada'){tg.mo=0;tg.mw=11+cs*1.5;tg.ms=.6+.2*cs;tg.mx=ss*5*(1-gz)+pxx*2.5*gz;tg.msk=ss*3*(1-gz);tg.tilt+=ss*3*(1-gz);tg.ly+=cs*.07}
+ cb+=((cur==='mastigando'||cur==='boca fechada'?(cs*.5+.5)*.4+.15:0)-cb)*Math.min(1,dt*14);
+ for(const k in K){const[st,d]=K[k];const a=(tg[k]-S[k])*st;V[k]+=a*dt;V[k]*=Math.pow(d,dt*10);S[k]+=V[k]*dt}
+ sqv+=(-sq*300-sqv*14)*dt;sq+=sqv*dt;
+ zA+=((cur==='sono'?1-gz:0)-zA)*Math.min(1,dt*4);hA+=((cur==='amor'||cur==='apaixonado'?1:0)-hA)*Math.min(1,dt*5);
+ vA+=((cur==='furioso'?1:0)-vA)*Math.min(1,dt*8);qA+=((cur==='confuso'?1:0)-qA)*Math.min(1,dt*7);cA+=((cur==='chorando'?1:0)-cA)*Math.min(1,dt*6);
+ /* desenho */
+ X.clearRect(0,0,112,112);
+ /* vira a bolha se o toque estiver do outro lado */
+ {const act=pt&&(down||now-ptT<8000);if(act&&pt.x<-.3)fl=-1;else if(act&&pt.x>.3)fl=1;X.setTransform(fl,0,0,1,fl<0?112:0,0)}
+ const fy0=Math.round(Math.sin(t*1.6)*2.6),bx=((TOOLS[cur]||SWORDS[cur]||CT[cur])?14:24)+Math.max(-2,Math.min(2,Math.round(S.lx*1.4))),by=24+fy0-Math.max(-4,Math.min(4,Math.round(sq*60)));
+ const sw=Math.round(38-fy0*2);for(let i=-sw/2;i<sw/2;i++)px(56+i,94,'#000',.14,1,2);
+ MASK.forEach(([x,y,o])=>px(bx+x,by+y,o?LINE:BUB));
+ [[14,6],[16,6],[18,6],[12,8]].forEach(([x,y])=>px(bx+x,by+y,'#fff',dark?.25:.9,2,2));
+ const lx=fl*Math.max(-1.6,Math.min(1.6,S.lx)),ly=Math.max(-1.4,Math.min(1.4,S.ly)),sh=S.tr*Math.pow(Math.max(0,Math.sin(t*2.2)),2);
+ const fx=Math.max(-6,Math.min(6,Math.round(lx*4.4+Math.sin(t*38)*sh*1.8))),fy=Math.max(-6,Math.min(6,Math.round(ly*3.6+Math.cos(t*31)*sh*1.4)));
+ const kk=Math.round(Math.abs(lx)*2.4),dl=Math.round(S.tilt*.24);
+ const exL=bx+8+fx+(lx<0?kk:0),exR=bx+40+fx-(lx>0?kk:0),eyy=by+19+fy;
+ eye(-1,Math.max(.05,S.lo*bk),t,exL,eyy-dl);eye(1,Math.max(.05,S.ro*bk),t,exR,eyy+dl);
+ if(S.bl>.5){[[exL+2,eyy+18],[exR+8,eyy+18]].forEach(([x,y])=>px(x,y,'#ff7aa8',.7,6,3))}
+ mouth(bx+16+fx+Math.round(S.mx*.6),by+33+fy);
+ /* efeitos */
+ if(cA>.05)for(const[s,o]of[[-1,0],[1,.8]]){const p=((t+o)%1.8)/1.8,n=2+Math.floor(Math.min(1,p/.6)*6),a=cA*(p<.12?p/.12:p>.75?(1-p)/.25:1),x=s<0?exL:exR+12;for(let j=0;j<n;j++)px(x,eyy+15+j,'#7cc8ff',a,4,1)}
+ if(vA>.05&&vA>.5)gl(VEIN,bx+46,by+4+(Math.sin(t*12)>0?0:2),'#ff3b3b');
+ if(qA>.5)gl(QM,bx+48,by+2+Math.round(Math.sin(t*4)*2),'#8b7bff');
+ if(zA>.02)for(let i=0;i<3;i++){const p=((((t-i*1.2)%3.6)+3.6)%3.6)/3.6,a=zA*(p<.15?p/.15:p>.7?(1-p)/.3:1);if(p<.45)gl(GZ4,bx+56+Math.round(p*24),by+4-Math.round(p*52),INK,a);else gl(GZ5,bx+56+Math.round(p*24),by+4-Math.round(p*52),INK,a)}
+ if(hA>.02)for(let i=0;i<3;i++){const p=((((t-i*1.1)%3.3)+3.3)%3.3)/3.3,a=hA*(p<.15?p/.15:p>.7?(1-p)/.3:1);gl(HRT,bx+[12,28,46][i]+Math.round(Math.sin(p*7+i)*4),by+4-Math.round(p*44),['#ff5c8a','#ff3d7f','#ff8fb1'][i],a)}
+ if(TOOLS[cur])mine(bx,by,dt);else if(SWORDS[cur])slash(bx,by,dt);else if(CT[cur])ctool(bx,by,dt);
+ X.globalAlpha=1;X.setTransform(1,0,0,1,0,0);
+ requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+window.bubbleLookAt = function(x,y){pt={x:Math.max(-1.6,Math.min(1.6,x)),y:Math.max(-1.4,Math.min(1.4,y))};ptT=performance.now();down=false;};
+</script></body></html>

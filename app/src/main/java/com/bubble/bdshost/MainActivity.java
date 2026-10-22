@@ -18,6 +18,8 @@ import android.os.Bundle;
 import android.net.Uri;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.provider.Settings;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -85,7 +87,10 @@ public class MainActivity extends Activity {
     private EditText viewDistance, tickDistance, maxThreads;
     private Switch cheats, forceGamemode, allowList, onlineMode;
     private Switch resourcePackRequired, clientChunkGeneration;
-    private TextView survival, creative, serverButton;
+    private TextView survival, creative, serverButton, minecraftLaunchButton, mascotToggleButton;
+    private boolean formCollapsed = false;
+    private boolean pendingMascotTouch = false;
+    private float lastMascotTouchX, lastMascotTouchY;
     private TextView[] difficultyButtons = new TextView[4];
     private TextView[] permissionButtons = new TextView[3];
     private boolean creativeMode;
@@ -145,12 +150,156 @@ public class MainActivity extends Activity {
         handleIntent(getIntent(), false);
         render();
         handler.post(uiTicker);
+        handler.postDelayed(mascotTouchSampler, 5000);
+        handler.postDelayed(this::offerMascotOverlayPermission, 1500);
     }
 
     @Override protected void onResume() {
         super.onResume();
         configureWindow();
         if (screenShouldChange()) render();
+        startMascotIfEnabled();
+        updateMascotButton();
+    }
+
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            lastMascotTouchX = event.getRawX();
+            lastMascotTouchY = event.getRawY();
+            pendingMascotTouch = true;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    private final Runnable mascotTouchSampler = new Runnable() {
+        @Override public void run() {
+            if (pendingMascotTouch && Settings.canDrawOverlays(MainActivity.this)
+                    && getSharedPreferences("bubble_mascot", MODE_PRIVATE)
+                       .getBoolean("enabled", false)) {
+                pendingMascotTouch = false;
+                Intent look = new Intent(MainActivity.this, MascotOverlayService.class)
+                        .setAction(MascotOverlayService.ACTION_LOOK)
+                        .putExtra(MascotOverlayService.EXTRA_X, lastMascotTouchX)
+                        .putExtra(MascotOverlayService.EXTRA_Y, lastMascotTouchY);
+                startService(look);
+            }
+            handler.postDelayed(this, 5000);
+        }
+    };
+
+    private void offerMascotOverlayPermission() {
+        if (isFinishing() || isDestroyed()) return;
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("bubble_mascot", MODE_PRIVATE);
+        if (Settings.canDrawOverlays(this)) {
+            if (!prefs.getBoolean("asked", false)) {
+                prefs.edit().putBoolean("asked", true).putBoolean("enabled", true).apply();
+            }
+            startMascotIfEnabled();
+            updateMascotButton();
+            return;
+        }
+        if (prefs.getBoolean("asked", false)) return;
+        prefs.edit().putBoolean("asked", true).apply();
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Bolha flutuante")
+                .setMessage("Permitir que a mascote Bubble apareça sobre outros aplicativos? "
+                        + "Ela não captura toques em outros apps e pode ser ocultada a qualquer momento.")
+                .setNegativeButton("Agora não", (d, w) -> updateMascotButton())
+                .setPositiveButton("Permitir", (d, w) -> requestMascotOverlay())
+                .show();
+    }
+
+    private void requestMascotOverlay() {
+        getSharedPreferences("bubble_mascot", MODE_PRIVATE).edit()
+                .putBoolean("enabled", true).apply();
+        try {
+            Intent settings = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(settings);
+        } catch (Exception e) {
+            Toast.makeText(this, "Ative a sobreposição nas configurações do Android.",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void startMascotIfEnabled() {
+        if (!Settings.canDrawOverlays(this)) return;
+        if (!getSharedPreferences("bubble_mascot", MODE_PRIVATE)
+                .getBoolean("enabled", false)) return;
+        try {
+            Intent show = new Intent(this, MascotOverlayService.class)
+                    .setAction(MascotOverlayService.ACTION_SHOW);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(show);
+            else startService(show);
+        } catch (Exception e) {
+            Toast.makeText(this, "Não foi possível exibir a mascote.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void toggleMascotOverlay() {
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("bubble_mascot", MODE_PRIVATE);
+        boolean enabled = prefs.getBoolean("enabled", false);
+        if (enabled && Settings.canDrawOverlays(this)) {
+            stopService(new Intent(this, MascotOverlayService.class));
+            prefs.edit().putBoolean("enabled", false).apply();
+        } else if (!Settings.canDrawOverlays(this)) {
+            requestMascotOverlay();
+        } else {
+            prefs.edit().putBoolean("enabled", true).apply();
+            startMascotIfEnabled();
+        }
+        updateMascotButton();
+    }
+
+    private void updateMascotButton() {
+        if (mascotToggleButton == null) return;
+        boolean active = Settings.canDrawOverlays(this)
+                && getSharedPreferences("bubble_mascot", MODE_PRIVATE)
+                        .getBoolean("enabled", false);
+        mascotToggleButton.setText(active ? "◉  Ocultar bolha flutuante"
+                : "◉  Mostrar bolha flutuante");
+    }
+
+    private void openMinecraft() {
+        Intent game = getPackageManager().getLaunchIntentForPackage("com.mojang.minecraftpe");
+        if (game == null) {
+            Toast.makeText(this, "Minecraft Bedrock não está instalado ou visível neste aparelho.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            game.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(game);
+        } catch (Exception e) {
+            Toast.makeText(this, "Não foi possível abrir o Minecraft.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void animateConfiguration(boolean collapse) {
+        if (configurationArea == null || formCollapsed == collapse) return;
+        formCollapsed = collapse;
+        configurationArea.animate().cancel();
+        if (collapse) {
+            configurationArea.animate().alpha(0f).scaleY(.94f)
+                    .translationY(-dp(12)).setDuration(330)
+                    .setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator())
+                    .withEndAction(() -> {
+                        if (formCollapsed && configurationArea != null)
+                            configurationArea.setVisibility(View.GONE);
+                    }).start();
+            if (configLockNotice != null) configLockNotice.setVisibility(View.GONE);
+        } else {
+            configurationArea.setVisibility(View.VISIBLE);
+            configurationArea.setAlpha(0f);
+            configurationArea.setScaleY(.94f);
+            configurationArea.setTranslationY(-dp(12));
+            configurationArea.animate().alpha(1f).scaleY(1f).translationY(0f)
+                    .setDuration(380)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            if (configLockNotice != null) configLockNotice.setVisibility(View.GONE);
+        }
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -711,6 +860,7 @@ public class MainActivity extends Activity {
         content.addView(configLockNotice, match(0,0,0,9));
 
         configurationArea = new LinearLayout(this);
+        formCollapsed = false;
         configurationArea.setOrientation(LinearLayout.VERTICAL);
 
         configurationArea.addView(categoryCard(
@@ -745,7 +895,19 @@ public class MainActivity extends Activity {
 
         serverButton = mainButton("▶  Iniciar Servidor");
         serverButton.setOnClickListener(v -> toggleServer());
-        content.addView(serverButton, match(0,0,0,10));
+        content.addView(serverButton, match(0,0,0,8));
+
+        minecraftLaunchButton = mainButton("▣  Abrir Minecraft");
+        minecraftLaunchButton.setOnClickListener(v -> openMinecraft());
+        minecraftLaunchButton.setVisibility(View.GONE);
+        content.addView(minecraftLaunchButton, match(0,0,0,8));
+
+        mascotToggleButton = smallButton("◉  Mostrar bolha flutuante");
+        mascotToggleButton.setTextSize(11);
+        mascotToggleButton.setOnClickListener(v -> toggleMascotOverlay());
+        content.addView(mascotToggleButton,
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        updateMascotButton();
 
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(
@@ -2266,9 +2428,9 @@ public class MainActivity extends Activity {
     private void setConfigurationLocked(boolean locked) {
         if (configurationArea == null) return;
         setEnabledRecursive(configurationArea, !locked);
-        configurationArea.setAlpha(locked ? .48f : 1f);
+        if (!formCollapsed && !locked) configurationArea.setAlpha(1f);
         if (configLockNotice != null) {
-            configLockNotice.setVisibility(locked ? View.VISIBLE : View.GONE);
+            configLockNotice.setVisibility(View.GONE);
         }
         if (locked) {
             View focused = getCurrentFocus();
@@ -2434,6 +2596,11 @@ public class MainActivity extends Activity {
         String state = BdsService.state(this);
         boolean running = BdsService.isRunning(this);
         setConfigurationLocked(running);
+        animateConfiguration("running".equals(state) || "stopping".equals(state));
+        if (minecraftLaunchButton != null) {
+            minecraftLaunchButton.setVisibility("running".equals(state)
+                    ? View.VISIBLE : View.GONE);
+        }
 
         if ("stopping".equals(state)) {
             serverButton.setText("■  Parando Servidor...");
@@ -2802,6 +2969,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         handler.removeCallbacks(uiTicker);
+        handler.removeCallbacks(mascotTouchSampler);
         if (bdsUpdateBubble != null) bdsUpdateBubble.dismiss();
         super.onDestroy();
     }
