@@ -526,12 +526,7 @@ public class MainActivity extends Activity {
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.bubble_app_icon);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        logo.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{
-                .65f, 0f, .15f, 0f, 0f,
-                .38f, .45f, 0f, 0f, 0f,
-                .65f, .15f, .28f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-        }));
+        logo.clearColorFilter();
         row.addView(logo, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
         LinearLayout words = new LinearLayout(this);

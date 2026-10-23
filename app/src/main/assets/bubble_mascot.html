@@ -31,7 +31,7 @@ canvas{width:100vw!important;height:100vw!important;max-width:100vw!important;
 <script>
 const $=i=>$.c[i]||($.c[i]=document.getElementById(i));$.c={};
 const X=$('c').getContext('2d');
-const MQ=matchMedia('(prefers-color-scheme: dark)');let dark=MQ.matches,INK,BUB;const LINE='#ff7aa8';
+const MQ=matchMedia('(prefers-color-scheme: dark)');let dark=MQ.matches,INK,BUB;const LINE='#000000';
 function thm(){dark=MQ.matches;INK=dark?'#f4f4f8':'#1a1a1f';BUB=dark?'#2b2b35':'#ffffff'}thm();MQ.addEventListener('change',thm);
 const D={ht:0,xx:0,tr:0,lo:1,ro:1,es:1,arc:0,la:0,lc:0,ch:0,mw:13,ms:.3,mo:0,msk:0,mx:0,lx:0,ly:0,tilt:0,bl:0};
 const E={
@@ -165,7 +165,7 @@ const QM=['.###.','#...#','....#','..##.','..#..','.....','..#..'];
 function px(x,y,c,a,w,h){X.globalAlpha=a==null?1:a;X.fillStyle=c;X.fillRect(Math.round(x),Math.round(y),w||1,h||1)}
 function gl(G,x,y,c,a){G.forEach((r,j)=>{for(let i=0;i<r.length;i++)if(r[i]==='#')px(x+i*2,y+j*2,c,a,2,2)})}
 /* mascara da bolha */
-const MASK=[];for(let y=0;y<64;y++)for(let x=0;x<64;x++){const dx=Math.max(Math.abs(x-31.5)-7,0),dy=Math.max(Math.abs(y-31.5)-7,0),d=Math.hypot(dx,dy);if(d<=24.5)MASK.push([x,y,d>22.1])}
+const MASK=[];for(let y=0;y<64;y++)for(let x=0;x<64;x++){const dx=Math.max(Math.abs(x-31.5)-12,0),dy=Math.max(Math.abs(y-31.5)-12,0),d=Math.hypot(dx,dy);if(d<=19.5)MASK.push([x,y,d>17.1])}
 /* olho 8x8 */
 function eye(side,o,t,x0,y0){
  const useH=S.ht>.5,useX=S.xx>.5&&!useH,useC=S.ch>.5&&!useH&&!useX,useA=S.arc>.5&&!useC&&!useH&&!useX;
