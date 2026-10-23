@@ -13,9 +13,9 @@ import android.graphics.drawable.Drawable;
 
 /** Background shared by the Bubble screens, never used for the splash. */
 public final class BubbleThemeBackground extends Drawable {
-    private static final int FROM = Color.rgb(66, 7, 23); // #2A1A26
-    private static final int TO = Color.rgb(22, 4, 10);   // #1C1A33
-    private static final float IMAGE_OPACITY = 0.07f;
+    private static final int FROM = Color.rgb(90, 4, 15); // #2A1A26
+    private static final int TO = Color.rgb(33, 2, 10);   // #1C1A33
+    private static final float IMAGE_OPACITY = 1.0f;
 
     private final Bitmap forest;
     private final Paint gradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -47,7 +47,7 @@ public final class BubbleThemeBackground extends Drawable {
                 midX - dx * half, midY - dy * half,
                 midX + dx * half, midY + dy * half,
                 FROM, TO, Shader.TileMode.CLAMP));
-        canvas.drawRect(b, gradientPaint);
+        if (forest == null || forest.isRecycled()) canvas.drawRect(b, gradientPaint);
 
         // The attached forest stays a subtle texture, not a bright wallpaper.
         if (forest != null && !forest.isRecycled()) {

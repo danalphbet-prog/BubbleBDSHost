@@ -382,7 +382,9 @@ public class MainActivity extends Activity {
 
     private void configureWindow() {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        getWindow().setNavigationBarColor(Color.BLACK);
+        getWindow().setNavigationBarColor(Color.rgb(117,0,18));
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR & 0);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         if (Build.VERSION.SDK_INT >= 30) {
@@ -391,14 +393,13 @@ public class MainActivity extends Activity {
             if (decor != null && decor.isAttachedToWindow()) {
                 WindowInsetsController controller = getWindow().getInsetsController();
                 if (controller != null) {
-                    controller.hide(WindowInsets.Type.statusBars());
+                    controller.show(WindowInsets.Type.statusBars());
                     controller.setSystemBarsBehavior(
                             WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 }
             }
         } else {
             getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_FULLSCREEN |
                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                     View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         }
@@ -419,7 +420,13 @@ public class MainActivity extends Activity {
             } else {
                 bottom = insets.getSystemWindowInsetBottom();
             }
-            v.setPadding(left, top, right, baseBottom + bottom);
+            int statusTop;
+            if (Build.VERSION.SDK_INT >= 30) {
+                statusTop = insets.getInsets(WindowInsets.Type.statusBars()).top;
+            } else {
+                statusTop = insets.getSystemWindowInsetTop();
+            }
+            v.setPadding(left, top + statusTop, right, baseBottom + bottom);
             return insets;
         });
         root.requestApplyInsets();
@@ -609,12 +616,6 @@ public class MainActivity extends Activity {
 
         ImageView hero = new ImageView(this);
         hero.setImageResource(R.drawable.bubble_app_icon);
-        hero.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{
-                .65f, 0f, .15f, 0f, 0f,
-                .38f, .45f, 0f, 0f, 0f,
-                .65f, .15f, .28f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-        }));
         hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(dp(92), dp(92));
         hp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -906,13 +907,19 @@ public class MainActivity extends Activity {
         content.addView(buildInlineConsole(), match(0,1,0,9));
 
         serverButton = mainButton("▶  Iniciar Servidor");
+        serverButton.setTextSize(11.0f);
+        serverButton.setPadding(dp(4),dp(9),dp(4),dp(9));
         serverButton.setOnClickListener(v -> toggleServer());
-        content.addView(serverButton, match(0,0,0,8));
+        LinearLayout serverActions = new LinearLayout(this);
+        serverActions.setOrientation(LinearLayout.HORIZONTAL);
+        serverActions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams startLp = new LinearLayout.LayoutParams(0, dp(60), 1);
+        serverActions.addView(serverButton,startLp);
 
         minecraftLaunchButton = mainButton("▣  Entrar no Minecraft");
-        minecraftLaunchButton.setTextSize(14.5f);
-        minecraftLaunchButton.setMinHeight(dp(68));
-        minecraftLaunchButton.setPadding(dp(12),dp(18),dp(12),dp(18));
+        minecraftLaunchButton.setTextSize(11.0f);
+        minecraftLaunchButton.setMinHeight(dp(54));
+        minecraftLaunchButton.setPadding(dp(4),dp(9),dp(4),dp(9));
         minecraftLaunchButton.setBackground(gradient(new int[]{
                 Color.rgb(201,34,65), Color.rgb(169,21,51), Color.rgb(128,19,46)}, 16));
         minecraftLaunchButton.setOnClickListener(v -> {
@@ -921,7 +928,10 @@ public class MainActivity extends Activity {
             openMinecraft();
         });
         minecraftLaunchButton.setVisibility(View.GONE);
-        content.addView(minecraftLaunchButton, match(0,0,0,8));
+        LinearLayout.LayoutParams enterLp = new LinearLayout.LayoutParams(0, dp(60), 1);
+        enterLp.setMargins(dp(7),0,0,0);
+        serverActions.addView(minecraftLaunchButton,enterLp);
+        content.addView(serverActions, match(0,0,0,8));
 
         mascotToggleButton = smallButton("◉  Mostrar bolha flutuante");
         mascotToggleButton.setTextSize(11);
@@ -1137,8 +1147,8 @@ public class MainActivity extends Activity {
     private View switchBlock(Switch sw) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setGravity(Gravity.CENTER_VERTICAL);
-        wrap.setMinimumHeight(dp(54));
-        wrap.setPadding(dp(12),dp(7),dp(8),dp(7));
+        wrap.setMinimumHeight(dp(44));
+        wrap.setPadding(dp(5),dp(4),dp(5),dp(4));
         wrap.setBackground(box(
                 Color.rgb(37,10,16),
                 Color.rgb(104,15,29),14));
@@ -1150,12 +1160,13 @@ public class MainActivity extends Activity {
 
     private Switch styledSwitch(String title, String subtitle) {
         Switch sw = new Switch(this);
-        sw.setText(title + "\n" + subtitle);
+        sw.setText(title);
+        sw.setContentDescription(title + ". " + subtitle);
         sw.setTextColor(MUTED);
-        sw.setTextSize(10.2f);
+        sw.setTextSize(9.2f);
         applyAppTypeface(sw, Typeface.NORMAL);
         sw.setGravity(Gravity.CENTER_VERTICAL);
-        sw.setPadding(dp(2),0,0,0);
+        sw.setPadding(0,0,0,0);
         sw.setThumbTintList(new ColorStateList(
                 new int[][]{
                         new int[]{android.R.attr.state_checked},
@@ -1171,25 +1182,15 @@ public class MainActivity extends Activity {
 
     private View responsivePair(View a, View b) {
         LinearLayout row = new LinearLayout(this);
-        if (isWide()) {
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.addView(a,new LinearLayout.LayoutParams(
-                    0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
-                    0,ViewGroup.LayoutParams.WRAP_CONTENT,1);
-            bp.setMargins(dp(9),0,0,0);
-            row.addView(b,bp);
-        } else {
-            row.setOrientation(LinearLayout.VERTICAL);
-            row.addView(a,new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-            bp.setMargins(0,dp(9),0,0);
-            row.addView(b,bp);
-        }
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        right.setMargins(dp(7),0,0,0);
+        row.addView(a,left);
+        row.addView(b,right);
         return row;
     }
 
@@ -1894,8 +1895,8 @@ public class MainActivity extends Activity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
         bar.setPadding(dp(8),dp(6),dp(8),dp(6));
-        bar.setBackground(box(Color.rgb(37,10,16),
-                Color.argb(100,156,125,190),20));
+        bar.setBackground(box(Color.rgb(170,6,27),
+                Color.WHITE,20));
         navHome=navItem("⌂\nInício");
         navAddons=navItem("◇\nAddon Bubble");
         navConsole=null;
