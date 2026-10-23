@@ -480,7 +480,7 @@ public class MainActivity extends Activity {
         r.setOrientation(LinearLayout.VERTICAL);
         int side = isWide() ? 24 : 12;
         r.setPadding(dp(side), dp(8), dp(side), dp(7));
-        r.setBackground(pageBg());
+        r.setBackgroundColor(Color.TRANSPARENT);
         return r;
     }
 
@@ -527,6 +527,15 @@ public class MainActivity extends Activity {
         logo.setImageResource(R.drawable.bubble_app_icon);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         logo.clearColorFilter();
+        logo.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View v, android.graphics.Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(11));
+            }
+        });
+        logo.setClipToOutline(true);
+        android.graphics.Paint shadowIcon = new android.graphics.Paint();
+        shadowIcon.setShadowLayer(dp(4), 0, dp(2), Color.argb(125,0,0,0));
+        logo.setLayerType(View.LAYER_TYPE_SOFTWARE, shadowIcon);
         row.addView(logo, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
         LinearLayout words = new LinearLayout(this);
@@ -538,6 +547,9 @@ public class MainActivity extends Activity {
         wordmark.setImageResource(R.drawable.bubble_wordmark);
         wordmark.setScaleType(ImageView.ScaleType.FIT_START);
         wordmark.setAdjustViewBounds(true);
+        android.graphics.Paint shadowTitle = new android.graphics.Paint();
+        shadowTitle.setShadowLayer(dp(3), 0, dp(2), Color.argb(155,0,0,0));
+        wordmark.setLayerType(View.LAYER_TYPE_SOFTWARE, shadowTitle);
         words.addView(wordmark, new LinearLayout.LayoutParams(
                 isWide() ? dp(220) : dp(178),
                 isWide() ? dp(32) : dp(27)));
@@ -930,6 +942,8 @@ public class MainActivity extends Activity {
 
         mascotToggleButton = smallButton("◉  Mostrar bolha flutuante");
         mascotToggleButton.setTextSize(11);
+        mascotToggleButton.setBackgroundColor(Color.TRANSPARENT);
+        mascotToggleButton.setShadowLayer(dp(3), 0, dp(2), Color.argb(185,0,0,0));
         mascotToggleButton.setOnClickListener(v -> toggleMascotOverlay());
         content.addView(mascotToggleButton,
                 new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
@@ -1216,7 +1230,9 @@ public class MainActivity extends Activity {
 
         LinearLayout title = new LinearLayout(this);
         title.setOrientation(LinearLayout.VERTICAL);
-        title.addView(tv("Addon Bubble", 20, WHITE, Typeface.BOLD));
+        TextView addonTitle = tv("Addon Bubble", 20, WHITE, Typeface.BOLD);
+        addonTitle.setShadowLayer(dp(3), 0, dp(2), Color.argb(180,0,0,0));
+        title.addView(addonTitle);
 
         addonWorldLabel = tv("", 9.8f, Color.argb(225,255,236,239), Typeface.NORMAL);
         title.addView(addonWorldLabel, match(0,2,0,0));
