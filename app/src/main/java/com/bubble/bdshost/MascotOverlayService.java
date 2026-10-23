@@ -23,6 +23,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebView;
 import android.widget.LinearLayout;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import java.io.File;
@@ -48,6 +49,10 @@ public final class MascotOverlayService extends Service {
     private WindowManager wm;
     private WebView mascot;
     private TextView satellite;
+    private TextView consoleSatellite;
+    private LinearLayout consolePanel;
+    private WindowManager.LayoutParams consoleSatelliteParams, consolePanelParams;
+    private boolean consoleVisible;
     private LinearLayout panel;
     private TextView info;
     private WindowManager.LayoutParams bubbleParams, satelliteParams, panelParams;
@@ -214,6 +219,7 @@ public final class MascotOverlayService extends Service {
     private void toggleExpanded() {
         if (expanded) {
             removePanel();
+            removeConsolePanel();
             removeSatellite();
             expanded = false;
             mascotModeChanged(false);
@@ -227,7 +233,7 @@ public final class MascotOverlayService extends Service {
         satellite.setTextSize(20);
         satellite.setGravity(Gravity.CENTER);
         satellite.setContentDescription("Detalhes do servidor Bubble");
-        satellite.setBackground(bg(Color.rgb(55, 38, 67), Color.rgb(161, 133, 190), 40));
+        satellite.setBackground(bg(Color.rgb(182, 16, 39), Color.WHITE, 40));
         satellite.setOnClickListener(v -> {
             if (panelVisible) removePanel(); else showPanel();
         });
@@ -241,6 +247,26 @@ public final class MascotOverlayService extends Service {
             satellite.animate().scaleX(1f).scaleY(1f).alpha(1f)
                     .setDuration(230).start();
         } catch (RuntimeException ignored) { satellite = null; }
+        consoleSatellite = new TextView(this);
+        consoleSatellite.setText(">_");
+        consoleSatellite.setTextColor(Color.WHITE);
+        consoleSatellite.setTextSize(22);
+        consoleSatellite.setGravity(Gravity.CENTER);
+        consoleSatellite.setContentDescription("Console flutuante");
+        consoleSatellite.setBackground(bg(Color.rgb(182, 16, 39), Color.WHITE, 36));
+        consoleSatellite.setOnClickListener(v -> {
+            if (consoleVisible) removeConsolePanel(); else showConsolePanel();
+        });
+        consoleSatelliteParams = layout(58,58,0,0);
+        positionExtras();
+        try {
+            wm.addView(consoleSatellite,consoleSatelliteParams);
+            consoleSatellite.setAlpha(0f);
+            consoleSatellite.setScaleX(.35f);
+            consoleSatellite.setScaleY(.35f);
+            consoleSatellite.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(260).start();
+        } catch(RuntimeException ignored){consoleSatellite=null;}
     }
 
     /** Requests a mood transition; the HTML queues it until the current animation finishes. */
@@ -257,6 +283,16 @@ public final class MascotOverlayService extends Service {
             satelliteParams.x = clamp(bubbleParams.x - dp(56), 0, screenWidth() - dp(58));
             satelliteParams.y = clamp(bubbleParams.y + dp(27), dp(35), screenHeight() - dp(65));
             updateView(satellite, satelliteParams);
+        }
+        if (consoleSatelliteParams != null) {
+            consoleSatelliteParams.x=clamp(bubbleParams.x-dp(56),0,screenWidth()-dp(58));
+            consoleSatelliteParams.y=clamp(bubbleParams.y+dp(91),dp(35),screenHeight()-dp(65));
+            updateView(consoleSatellite,consoleSatelliteParams);
+        }
+        if (consolePanelParams != null) {
+            consolePanelParams.x=clamp(bubbleParams.x-dp(218),0,screenWidth()-dp(300));
+            consolePanelParams.y=clamp(bubbleParams.y+dp(156),dp(40),screenHeight()-dp(240));
+            updateView(consolePanel,consolePanelParams);
         }
         if (panelParams != null) {
             panelParams.x = clamp(bubbleParams.x - dp(210), 0, screenWidth() - dp(290));
@@ -277,7 +313,7 @@ public final class MascotOverlayService extends Service {
         panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(15), dp(13), dp(15), dp(14));
-        panel.setBackground(bg(Color.rgb(35, 27, 50), Color.rgb(139, 120, 171), 20));
+        panel.setBackground(bg(Color.rgb(37, 14, 22), Color.rgb(224, 82, 104), 20));
 
         TextView title = new TextView(this);
         title.setText("▤  BUBBLE • MUNDO");
@@ -300,7 +336,7 @@ public final class MascotOverlayService extends Service {
         openApp.setTextSize(11);
         openApp.setGravity(Gravity.CENTER);
         openApp.setPadding(dp(8),dp(12),dp(8),dp(12));
-        openApp.setBackground(bg(Color.rgb(81, 58, 113), Color.rgb(157, 132, 190), 12));
+        openApp.setBackground(bg(Color.rgb(175, 20, 42), Color.WHITE, 12));
         openApp.setOnClickListener(v -> {
             Intent open = new Intent(this, MainActivity.class);
             open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -330,11 +366,105 @@ public final class MascotOverlayService extends Service {
     }
 
     private void removeSatellite() {
+        removeConsolePanel();
+        if(consoleSatellite!=null){
+            TextView closing=consoleSatellite;
+            closing.animate().alpha(0f).scaleX(.3f).scaleY(.3f).setDuration(160)
+                    .withEndAction(()->{try{wm.removeView(closing);}catch(RuntimeException ignored){}}).start();
+            consoleSatellite=null;
+        }
+        consoleSatelliteParams=null;
         if (satellite != null) {
             try { wm.removeView(satellite); } catch (RuntimeException ignored) {}
             satellite = null;
         }
         satelliteParams = null;
+    }
+
+    private Typeface pixelFont(){
+        try{return getResources().getFont(R.font.minecraft_regular);}
+        catch(Throwable ignored){return Typeface.DEFAULT;}
+    }
+
+    private void showConsolePanel() {
+        if (consoleVisible) return;
+        if (!BdsService.isRunning(this)) {
+            android.widget.Toast.makeText(this,"Servidor desligado",android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        consoleVisible=true;
+        consolePanel=new LinearLayout(this);
+        consolePanel.setOrientation(LinearLayout.VERTICAL);
+        consolePanel.setPadding(dp(14),dp(13),dp(14),dp(14));
+        consolePanel.setBackground(bg(Color.rgb(35,13,19),Color.rgb(255,97,115),14));
+        TextView title=new TextView(this);
+        title.setText(">_  CONSOLE BUBBLE");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(13);
+        title.setTypeface(pixelFont());
+        consolePanel.addView(title);
+        EditText command=new EditText(this);
+        command.setSingleLine(true);
+        command.setHint("Comando ou !!op Jogador");
+        command.setHintTextColor(Color.rgb(159,147,150));
+        command.setTextColor(Color.WHITE);
+        command.setTextSize(12);
+        command.setTypeface(Typeface.MONOSPACE);
+        command.setPadding(dp(8),dp(8),dp(8),dp(8));
+        command.setBackground(bg(Color.rgb(18,13,16),Color.rgb(110,77,83),7));
+        consolePanel.addView(command);
+        TextView send=new TextView(this);
+        send.setText("ENVIAR  ›");
+        send.setGravity(Gravity.CENTER);
+        send.setTextColor(Color.WHITE);
+        send.setTextSize(12);
+        send.setTypeface(pixelFont());
+        send.setPadding(dp(8),dp(12),dp(8),dp(12));
+        send.setBackground(bg(Color.rgb(206,19,44),Color.WHITE,9));
+        send.setOnClickListener(v->{
+            if (!BdsService.isRunning(this)) {command.setError("Servidor desligado");return;}
+            String raw=command.getText().toString().trim();
+            boolean admin=raw.startsWith("!!");
+            String cmd=admin?raw.substring(2).trim():raw;
+            if(cmd.startsWith("/"))cmd=cmd.substring(1).trim();
+            if(cmd.isEmpty()||cmd.length()>1024||cmd.contains("\n")||cmd.contains("\r")){
+                command.setError("Comando inválido");return;
+            }
+            String lower=cmd.toLowerCase(Locale.ROOT);
+            if(!admin&&!(lower.equals("list")||lower.equals("help")||lower.equals("seed")
+                    ||lower.startsWith("say ")||lower.startsWith("help ")
+                    ||lower.startsWith("tell ")||lower.startsWith("msg ")||lower.startsWith("w "))){
+                command.setError("Use !! para comandos administrativos");return;
+            }
+            startService(new Intent(this,BdsService.class)
+                    .setAction(BdsService.ACTION_COMMAND)
+                    .putExtra(BdsService.EXTRA_COMMAND,cmd));
+            command.setText("");
+            android.widget.Toast.makeText(this,"Enviado",android.widget.Toast.LENGTH_SHORT).show();
+        });
+        consolePanel.addView(send);
+        consolePanelParams=layout(300,WindowManager.LayoutParams.WRAP_CONTENT,0,0);
+        consolePanelParams.flags=WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+        consolePanelParams.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+        positionExtras();
+        try {
+            wm.addView(consolePanel,consolePanelParams);
+            consolePanel.setAlpha(0f);
+            consolePanel.setScaleX(.82f);consolePanel.setScaleY(.82f);
+            consolePanel.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).start();
+        }catch(RuntimeException ex){removeConsolePanel();}
+    }
+
+    private void removeConsolePanel(){
+        consoleVisible=false;
+        if(consolePanel!=null){
+            LinearLayout closing=consolePanel;
+            closing.animate().alpha(0f).scaleX(.8f).scaleY(.8f).setDuration(150)
+                    .withEndAction(()->{try{wm.removeView(closing);}catch(RuntimeException ignored){}}).start();
+            consolePanel=null;
+        }
+        consolePanelParams=null;
     }
 
     private String prop(String key, String fallback) {

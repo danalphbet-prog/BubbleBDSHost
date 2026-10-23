@@ -768,14 +768,14 @@ window.bubbleLookAt = function(x,y){pt={x:Math.max(-1.6,Math.min(1.6,x)),y:Math.
   auto=false;
   let open=false,pendingOpen=null,opening=[],pos=0;
   const normal=['neutro','feliz','alegria','curioso','pensativo','entediado',
-                'sono','sono','sono','picareta de madeira','feliz','sono'];
-  const expanded=['curioso','sono','pensativo','sono','curioso','pensativo'];
+                'sono','picareta de madeira','feliz','curioso'];
+  const expanded=['curioso','sono','pensativo','curioso','pensativo'];
   const surprise=['espanto','piscadela','espanto'];
   let normalIx=0,openedIx=0,turnDeadline=performance.now()+10000;
   let pendingYawn=false;
   let modeSequence=[];
   function animationDuration(name){
-    if(name==='sono') return (Math.random()<.5?20000:30000);
+    if(name==='sono') return 20000;
     if(name==='bocejando') return 4800;
     if(TOOLS[name]) {
       const period=TOOLS[name].c*1000;

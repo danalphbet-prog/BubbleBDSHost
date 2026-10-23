@@ -13,9 +13,9 @@ import android.graphics.drawable.Drawable;
 
 /** Background shared by the Bubble screens, never used for the splash. */
 public final class BubbleThemeBackground extends Drawable {
-    private static final int FROM = Color.rgb(42, 26, 38); // #2A1A26
-    private static final int TO = Color.rgb(28, 26, 51);   // #1C1A33
-    private static final float IMAGE_OPACITY = 0.12f;
+    private static final int FROM = Color.rgb(66, 7, 23); // #2A1A26
+    private static final int TO = Color.rgb(22, 4, 10);   // #1C1A33
+    private static final float IMAGE_OPACITY = 0.07f;
 
     private final Bitmap forest;
     private final Paint gradientPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
