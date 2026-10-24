@@ -66,6 +66,9 @@ public final class BubbleFirebaseSync {
     }
     public String bdsUid() { return prefs.getString("uid", ""); }
     public String instanceId() { return instanceId; }
+    public boolean hasUploadedMembers() {
+        synchronized (lock) { return online && uploadedMembers != null && !uploadedMembers.isEmpty(); }
+    }
     public boolean isMemberUploaded(String playerId) {
         synchronized (lock) {
             return online && uploadedMembers != null && uploadedMembers.contains(playerId);

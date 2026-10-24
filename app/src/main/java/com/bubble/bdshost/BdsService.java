@@ -54,6 +54,7 @@ public class BdsService extends Service {
     private BubbleFirebaseSync bubbleFirebase;
     private BubbleMembershipMonitor bubbleMembers;
     private BubbleApiStream bubbleApiStream;
+    private BubbleAddonViewerBridge bubbleAddonBridge;
     private android.os.HandlerThread bubbleQueryThread;
     private android.os.Handler bubbleQueryHandler;
     private PowerManager.WakeLock wakeLock;
@@ -68,6 +69,7 @@ public class BdsService extends Service {
         createChannel();
         bubbleFirebase = new BubbleFirebaseSync(this);
         bubbleApiStream = new BubbleApiStream(this, bubbleFirebase);
+        bubbleAddonBridge = new BubbleAddonViewerBridge(this, bubbleFirebase, this::sendSilentQuery);
         bubbleMembers = new BubbleMembershipMonitor(bubbleFirebase, this::sendSilentQuery, bubbleApiStream);
         BubbleStressState.interruptedByRestart(this);
         stressBenchmark = new QuerytargetBenchmark(new QuerytargetBenchmark.ConsoleBridge() {
@@ -161,6 +163,7 @@ public class BdsService extends Service {
                     setState("running", started);
                     if (bubbleFirebase != null) bubbleFirebase.onServerOnline();
                     if (bubbleApiStream != null) bubbleApiStream.onServerOnline();
+                    if (bubbleAddonBridge != null) bubbleAddonBridge.onServerOnline();
                 }
                 appendLog("[bubble] Servidor iniciado.\n");
                 updateNotification();
@@ -169,6 +172,7 @@ public class BdsService extends Service {
                         process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = r.readLine()) != null) {
+                        if (line.contains("[BubbleAPI-RECEPTOR-READY]") && bubbleAddonBridge != null) bubbleAddonBridge.onAddonReady();
                         if (stressBenchmark != null) stressBenchmark.acceptStdoutLine(line);
                         boolean hidden = bubbleMembers != null
                                 && (stressBenchmark == null || !stressBenchmark.isRunning())
@@ -184,6 +188,7 @@ public class BdsService extends Service {
             } finally {
                 if (stressBenchmark != null) stressBenchmark.cancel();
                 if (bubbleMembers != null) bubbleMembers.reset();
+                if (bubbleAddonBridge != null) bubbleAddonBridge.onServerStopped();
                 if (bubbleApiStream != null) bubbleApiStream.onServerStopped();
                 if (bubbleFirebase != null) bubbleFirebase.onServerStopped();
                 synchronized (this) {
@@ -361,6 +366,7 @@ public class BdsService extends Service {
                         && "running".equals(state(BdsService.this));
                 boolean benchmark = stressBenchmark != null && stressBenchmark.isRunning();
                 bubbleMembers.poll(ready, benchmark);
+                if (bubbleAddonBridge != null) bubbleAddonBridge.tick();
             }
             if (bubbleQueryHandler != null) bubbleQueryHandler.postDelayed(this, 100L);
         }
@@ -631,6 +637,7 @@ public class BdsService extends Service {
     }
 
     @Override public void onDestroy() {
+        if (bubbleAddonBridge != null) bubbleAddonBridge.close();
         if (bubbleApiStream != null) bubbleApiStream.close();
         if (bubbleQueryHandler != null) bubbleQueryHandler.removeCallbacks(bubbleMembershipTicker);
         if (bubbleQueryThread != null) bubbleQueryThread.quitSafely();

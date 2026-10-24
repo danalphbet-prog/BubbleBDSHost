@@ -1819,7 +1819,8 @@ public class MainActivity extends Activity {
         tip.setPadding(0, dp(5), 0, dp(9));
         card.addView(tip);
         firebaseBubbleStatus = tv(BubbleFirebaseSync.displayStatus(this)
-                + "\n" + BubbleApiStream.displayStatus(this),
+                + "\n" + BubbleApiStream.displayStatus(this)
+                + "\n" + BubbleAddonViewerBridge.displayStatus(this),
                 10.4f,WHITE,Typeface.NORMAL);
         firebaseBubbleStatus.setTextIsSelectable(true);
         firebaseBubbleStatus.setPadding(dp(9),dp(11),dp(9),dp(11));
@@ -3154,7 +3155,8 @@ public class MainActivity extends Activity {
                 refreshServerConsole(false);
                 if (firebaseBubbleStatus != null) {
                     String status = BubbleFirebaseSync.displayStatus(MainActivity.this)
-                            + "\n" + BubbleApiStream.displayStatus(MainActivity.this);
+                            + "\n" + BubbleApiStream.displayStatus(MainActivity.this)
+                            + "\n" + BubbleAddonViewerBridge.displayStatus(MainActivity.this);
                     if (!status.contentEquals(firebaseBubbleStatus.getText()))
                         firebaseBubbleStatus.setText(status);
                 }
