@@ -39,6 +39,7 @@ public class BdsService extends Service {
     public static final String ACTION_STOP = "com.bubble.bdshost.STOP";
     public static final String ACTION_COMMAND = "com.bubble.bdshost.COMMAND";
     public static final String ACTION_STRESS_TEST = "com.bubble.bdshost.STRESS_TEST";
+    public static final String ACTION_FIREBASE_REFRESH = "com.bubble.bdshost.FIREBASE_REFRESH";
     public static final String EXTRA_STRESS_COUNT = "stress_count";
     public static final String EXTRA_COMMAND = "command";
 
@@ -50,6 +51,8 @@ public class BdsService extends Service {
     private volatile Process process;
     private volatile BufferedWriter stdin;
     private QuerytargetBenchmark stressBenchmark;
+    private BubbleFirebaseSync bubbleFirebase;
+    private BubbleMembershipMonitor bubbleMembers;
     private PowerManager.WakeLock wakeLock;
     private ConnectivityManager networkManager;
     private ConnectivityManager.NetworkCallback networkWatcher;
@@ -60,6 +63,8 @@ public class BdsService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         createChannel();
+        bubbleFirebase = new BubbleFirebaseSync(this);
+        bubbleMembers = new BubbleMembershipMonitor(bubbleFirebase, this::sendBenchmarkCommand);
         BubbleStressState.interruptedByRestart(this);
         stressBenchmark = new QuerytargetBenchmark(new QuerytargetBenchmark.ConsoleBridge() {
             @Override public boolean isBdsOnline() {
@@ -71,6 +76,7 @@ public class BdsService extends Service {
             }
         });
         handler.post(notificationTicker);
+        handler.post(bubbleMembershipTicker);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -82,6 +88,8 @@ public class BdsService extends Service {
             sendCommand(intent.getStringExtra(EXTRA_COMMAND));
         else if (ACTION_STRESS_TEST.equals(action))
             startStressTest(intent.getIntExtra(EXTRA_STRESS_COUNT, 10));
+        else if (ACTION_FIREBASE_REFRESH.equals(action) && bubbleFirebase != null)
+            bubbleFirebase.refreshManifest();
         return START_NOT_STICKY;
     }
 
@@ -144,6 +152,7 @@ public class BdsService extends Service {
                     stopServerGracefully();
                 } else {
                     setState("running", started);
+                    if (bubbleFirebase != null) bubbleFirebase.onServerOnline();
                 }
                 appendLog("[bubble] Servidor iniciado.\n");
                 updateNotification();
@@ -153,7 +162,10 @@ public class BdsService extends Service {
                     String line;
                     while ((line = r.readLine()) != null) {
                         if (stressBenchmark != null) stressBenchmark.acceptStdoutLine(line);
-                        appendLog(line + "\n");
+                        boolean hidden = bubbleMembers != null
+                                && (stressBenchmark == null || !stressBenchmark.isRunning())
+                                && bubbleMembers.acceptLine(line);
+                        if (!hidden) appendLog(line + "\n");
                     }
                 }
 
@@ -163,6 +175,8 @@ public class BdsService extends Service {
                 appendLog("[bubble] ERRO: " + e.getMessage() + "\n");
             } finally {
                 if (stressBenchmark != null) stressBenchmark.cancel();
+                if (bubbleMembers != null) bubbleMembers.reset();
+                if (bubbleFirebase != null) bubbleFirebase.onServerStopped();
                 synchronized (this) {
                     process = null;
                     stdin = null;
@@ -304,6 +318,10 @@ public class BdsService extends Service {
 
     private void startStressTest(int count) {
         if (stressBenchmark == null || stressBenchmark.isRunning()) return;
+        if (bubbleMembers != null && !bubbleMembers.canStartBenchmark()) {
+            handler.postDelayed(() -> startStressTest(count), 120L);
+            return;
+        }
         if (count != 10 && count != 20 && count != 30 && count != 40) {
             BubbleStressState.fail(this, "Quantidade inválida (10/20/30/40)");
             return;
@@ -327,6 +345,18 @@ public class BdsService extends Service {
     }
 
     /** Command originates in this service; the UI-only !! prefix is not sent to BDS. */
+    private final Runnable bubbleMembershipTicker = new Runnable() {
+        @Override public void run() {
+            if (bubbleMembers != null) {
+                boolean ready = process != null && process.isAlive()
+                        && "running".equals(state(BdsService.this));
+                boolean benchmark = stressBenchmark != null && stressBenchmark.isRunning();
+                bubbleMembers.poll(ready, benchmark);
+            }
+            handler.postDelayed(this, 1000L);
+        }
+    };
+
     private synchronized void sendBenchmarkCommand(String command) throws Exception {
         if (stdin == null || process == null || !process.isAlive())
             throw new IllegalStateException("BDS offline");
@@ -583,6 +613,12 @@ public class BdsService extends Service {
     }
 
     @Override public void onDestroy() {
+        handler.removeCallbacks(bubbleMembershipTicker);
+        if (bubbleMembers != null) bubbleMembers.reset();
+        if (bubbleFirebase != null) {
+            bubbleFirebase.onServerStopped();
+            bubbleFirebase.close();
+        }
         if (stressBenchmark != null) stressBenchmark.cancel();
         releaseNetworkWatcher();
         handler.removeCallbacks(notificationTicker);

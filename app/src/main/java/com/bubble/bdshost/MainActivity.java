@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
     private Switch resourcePackRequired, clientChunkGeneration;
     private TextView survival, creative, serverButton, minecraftLaunchButton, mascotToggleButton;
     private LinearLayout consolePanelBody;
+    private TextView firebaseBubbleStatus;
     private TextView consolePanelArrow;
     private boolean consoleExpanded = false;
     private boolean introShowing = false;
@@ -913,6 +914,7 @@ public class MainActivity extends Activity {
         content.addView(configurationArea);
         content.addView(buildInlineConsole(), match(0,1,0,9));
         content.addView(new BubbleStressView(this, false), match(0,1,0,10));
+        content.addView(buildFirebaseBubbleCard(), match(0,1,0,10));
 
         serverButton = mainButton("▶  Iniciar Servidor");
         serverButton.setTextSize(11.0f);
@@ -1804,6 +1806,35 @@ public class MainActivity extends Activity {
             }
         }
         if (addonLockNotice != null) addonLockNotice.setVisibility(locked ? View.VISIBLE : View.GONE);
+    }
+
+    private View buildFirebaseBubbleCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(13),dp(13),dp(13),dp(13));
+        card.setBackground(box(CARD,Color.rgb(171,20,43),14));
+        card.addView(tv("◉  BUBBLE NETWORK • FIREBASE",12.8f,WHITE,Typeface.BOLD));
+        TextView tip = tv("Uma dimensão • BDS + instâncias + IDs de jogadores."
+                + " Sem enviar XYZ.",9.7f,MUTED,Typeface.NORMAL);
+        tip.setPadding(0, dp(5), 0, dp(9));
+        card.addView(tip);
+        firebaseBubbleStatus = tv(BubbleFirebaseSync.displayStatus(this),
+                10.4f,WHITE,Typeface.NORMAL);
+        firebaseBubbleStatus.setTextIsSelectable(true);
+        firebaseBubbleStatus.setPadding(dp(9),dp(11),dp(9),dp(11));
+        firebaseBubbleStatus.setBackground(box(TERMINAL,Color.rgb(104,15,29),9));
+        card.addView(firebaseBubbleStatus);
+        TextView refresh = smallButton("↻  Consultar manifesto Firebase");
+        refresh.setOnClickListener(v -> {
+            if (!"running".equals(BdsService.state(this))) {
+                Toast.makeText(this,"Inicie o BDS primeiro",Toast.LENGTH_SHORT).show();
+                return;
+            }
+            startService(new Intent(this,BdsService.class)
+                    .setAction(BdsService.ACTION_FIREBASE_REFRESH));
+        });
+        card.addView(refresh,match(0,9,0,0));
+        return card;
     }
 
     private View buildInlineConsole() {
@@ -3120,6 +3151,11 @@ public class MainActivity extends Activity {
                 updateServerUi();
                 setAddonLocked(BdsService.isRunning(MainActivity.this));
                 refreshServerConsole(false);
+                if (firebaseBubbleStatus != null) {
+                    String status = BubbleFirebaseSync.displayStatus(MainActivity.this);
+                    if (!status.contentEquals(firebaseBubbleStatus.getText()))
+                        firebaseBubbleStatus.setText(status);
+                }
             } else {
                 refreshInstallUi();
             }
