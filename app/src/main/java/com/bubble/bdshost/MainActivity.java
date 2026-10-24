@@ -912,6 +912,7 @@ public class MainActivity extends Activity {
 
         content.addView(configurationArea);
         content.addView(buildInlineConsole(), match(0,1,0,9));
+        content.addView(new BubbleStressView(this, false), match(0,1,0,10));
 
         serverButton = mainButton("▶  Iniciar Servidor");
         serverButton.setTextSize(11.0f);

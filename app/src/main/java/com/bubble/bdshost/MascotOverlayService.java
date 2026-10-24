@@ -50,6 +50,9 @@ public final class MascotOverlayService extends Service {
     private WebView mascot;
     private TextView satellite;
     private TextView consoleSatellite;
+    private TextView stressSatellite;
+    private BubbleStressView stressPanel;
+    private WindowManager.LayoutParams stressSatelliteParams, stressPanelParams;
     private LinearLayout consolePanel;
     private WindowManager.LayoutParams consoleSatelliteParams, consolePanelParams;
     private boolean consoleVisible;
@@ -220,6 +223,7 @@ public final class MascotOverlayService extends Service {
         if (expanded) {
             removePanel();
             removeConsolePanel();
+            removeStressPanel();
             removeSatellite();
             expanded = false;
             mascotModeChanged(false);
@@ -267,6 +271,28 @@ public final class MascotOverlayService extends Service {
             consoleSatellite.animate().alpha(1f).scaleX(1f).scaleY(1f)
                     .setDuration(260).start();
         } catch(RuntimeException ignored){consoleSatellite=null;}
+
+        stressSatellite = new TextView(this);
+        stressSatellite.setText("Hz");
+        stressSatellite.setTextColor(Color.WHITE);
+        stressSatellite.setTextSize(17);
+        stressSatellite.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        stressSatellite.setGravity(Gravity.CENTER);
+        stressSatellite.setContentDescription("Bubble Stress Test");
+        stressSatellite.setBackground(bg(Color.rgb(182,16,39),Color.WHITE,36));
+        stressSatellite.setOnClickListener(v -> {
+            if (stressPanel != null) removeStressPanel(); else showStressPanel();
+        });
+        stressSatelliteParams = layout(58,58,0,0);
+        positionExtras();
+        try {
+            wm.addView(stressSatellite, stressSatelliteParams);
+            stressSatellite.setScaleX(.35f);
+            stressSatellite.setScaleY(.35f);
+            stressSatellite.setAlpha(0f);
+            stressSatellite.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(250).start();
+        } catch(RuntimeException ignored) { stressSatellite = null; }
     }
 
     /** Requests a mood transition; the HTML queues it until the current animation finishes. */
@@ -289,6 +315,16 @@ public final class MascotOverlayService extends Service {
             consoleSatelliteParams.y=clamp(bubbleParams.y+dp(91),dp(35),screenHeight()-dp(65));
             updateView(consoleSatellite,consoleSatelliteParams);
         }
+        if (stressSatelliteParams != null) {
+            stressSatelliteParams.x = clamp(bubbleParams.x - dp(56),0,screenWidth()-dp(58));
+            stressSatelliteParams.y = clamp(bubbleParams.y + dp(155),dp(35),screenHeight()-dp(65));
+            updateView(stressSatellite,stressSatelliteParams);
+        }
+        if (stressPanelParams != null) {
+            stressPanelParams.x = clamp(bubbleParams.x - dp(250),0,screenWidth()-dp(312));
+            stressPanelParams.y = clamp(bubbleParams.y + dp(190),dp(35),screenHeight()-dp(380));
+            updateView(stressPanel,stressPanelParams);
+        }
         if (consolePanelParams != null) {
             consolePanelParams.x=clamp(bubbleParams.x-dp(218),0,screenWidth()-dp(300));
             consolePanelParams.y=clamp(bubbleParams.y+dp(156),dp(40),screenHeight()-dp(240));
@@ -309,6 +345,7 @@ public final class MascotOverlayService extends Service {
 
     private void showPanel() {
         if (panelVisible) return;
+        removeStressPanel();
         panelVisible = true;
         panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -366,6 +403,12 @@ public final class MascotOverlayService extends Service {
     }
 
     private void removeSatellite() {
+        removeStressPanel();
+        if (stressSatellite != null) {
+            try { wm.removeView(stressSatellite); } catch (RuntimeException ignored) {}
+            stressSatellite = null;
+        }
+        stressSatelliteParams = null;
         removeConsolePanel();
         if(consoleSatellite!=null){
             TextView closing=consoleSatellite;
@@ -386,8 +429,35 @@ public final class MascotOverlayService extends Service {
         catch(Throwable ignored){return Typeface.DEFAULT;}
     }
 
+    private void showStressPanel() {
+        removeConsolePanel();
+        removePanel();
+        stressPanel = new BubbleStressView(this, true);
+        stressPanelParams = layout(312, WindowManager.LayoutParams.WRAP_CONTENT, 0, 0);
+        stressPanelParams.flags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+        positionExtras();
+        try {
+            wm.addView(stressPanel, stressPanelParams);
+            stressPanel.setAlpha(0f);
+            stressPanel.setScaleX(.82f);
+            stressPanel.setScaleY(.82f);
+            stressPanel.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                    .setDuration(240).start();
+        } catch (RuntimeException ex) { removeStressPanel(); }
+    }
+
+    private void removeStressPanel() {
+        if (stressPanel != null) {
+            try { wm.removeView(stressPanel); } catch (RuntimeException ignored) {}
+            stressPanel = null;
+        }
+        stressPanelParams = null;
+    }
+
     private void showConsolePanel() {
         if (consoleVisible) return;
+        removeStressPanel();
         if (!BdsService.isRunning(this)) {
             android.widget.Toast.makeText(this,"Servidor desligado",android.widget.Toast.LENGTH_SHORT).show();
             return;

@@ -1,5 +1,6 @@
 package com.bubble.bdshost;
 
+import com.bubble.bdshost.benchmark.QuerytargetBenchmark;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -37,6 +38,8 @@ public class BdsService extends Service {
     public static final String ACTION_START = "com.bubble.bdshost.START";
     public static final String ACTION_STOP = "com.bubble.bdshost.STOP";
     public static final String ACTION_COMMAND = "com.bubble.bdshost.COMMAND";
+    public static final String ACTION_STRESS_TEST = "com.bubble.bdshost.STRESS_TEST";
+    public static final String EXTRA_STRESS_COUNT = "stress_count";
     public static final String EXTRA_COMMAND = "command";
 
     private static final String PREFS = "bubble_server_state";
@@ -44,8 +47,9 @@ public class BdsService extends Service {
     private static final int NOTIFICATION_ID = 19132;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private Process process;
-    private BufferedWriter stdin;
+    private volatile Process process;
+    private volatile BufferedWriter stdin;
+    private QuerytargetBenchmark stressBenchmark;
     private PowerManager.WakeLock wakeLock;
     private ConnectivityManager networkManager;
     private ConnectivityManager.NetworkCallback networkWatcher;
@@ -56,6 +60,16 @@ public class BdsService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         createChannel();
+        BubbleStressState.interruptedByRestart(this);
+        stressBenchmark = new QuerytargetBenchmark(new QuerytargetBenchmark.ConsoleBridge() {
+            @Override public boolean isBdsOnline() {
+                return process != null && process.isAlive()
+                        && "running".equals(state(BdsService.this));
+            }
+            @Override public void sendCommand(String command) throws Exception {
+                sendBenchmarkCommand(command);
+            }
+        });
         handler.post(notificationTicker);
     }
 
@@ -66,6 +80,8 @@ public class BdsService extends Service {
         else if (ACTION_STOP.equals(action)) stopServerGracefully();
         else if (ACTION_COMMAND.equals(action))
             sendCommand(intent.getStringExtra(EXTRA_COMMAND));
+        else if (ACTION_STRESS_TEST.equals(action))
+            startStressTest(intent.getIntExtra(EXTRA_STRESS_COUNT, 10));
         return START_NOT_STICKY;
     }
 
@@ -135,7 +151,10 @@ public class BdsService extends Service {
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(
                         process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
-                    while ((line = r.readLine()) != null) appendLog(line + "\n");
+                    while ((line = r.readLine()) != null) {
+                        if (stressBenchmark != null) stressBenchmark.acceptStdoutLine(line);
+                        appendLog(line + "\n");
+                    }
                 }
 
                 int rc = process.waitFor();
@@ -143,6 +162,7 @@ public class BdsService extends Service {
             } catch (Exception e) {
                 appendLog("[bubble] ERRO: " + e.getMessage() + "\n");
             } finally {
+                if (stressBenchmark != null) stressBenchmark.cancel();
                 synchronized (this) {
                     process = null;
                     stdin = null;
@@ -282,8 +302,46 @@ public class BdsService extends Service {
         protectedNetwork = null;
     }
 
+    private void startStressTest(int count) {
+        if (stressBenchmark == null || stressBenchmark.isRunning()) return;
+        if (count != 10 && count != 20 && count != 30 && count != 40) {
+            BubbleStressState.fail(this, "Quantidade inválida (10/20/30/40)");
+            return;
+        }
+        if (process == null || !process.isAlive() || !"running".equals(state(this))) {
+            BubbleStressState.fail(this, "Servidor offline");
+            return;
+        }
+        BubbleStressState.start(this, count);
+        boolean started = stressBenchmark.start(count, new QuerytargetBenchmark.Listener() {
+            @Override public void onProgress(int completed, int requested) {
+                BubbleStressState.progress(BdsService.this, completed, requested);
+            }
+            @Override public void onComplete(QuerytargetBenchmark.Report report) {
+                BubbleStressState.finish(BdsService.this, report);
+                appendLog("[bubble] Stress Test: " + report.completed + "/"
+                        + report.requested + " consultas, " + report.elapsedMs + " ms.\n");
+            }
+        });
+        if (!started) BubbleStressState.fail(this, "Teste já em andamento");
+    }
+
+    /** Command originates in this service; the UI-only !! prefix is not sent to BDS. */
+    private synchronized void sendBenchmarkCommand(String command) throws Exception {
+        if (stdin == null || process == null || !process.isAlive())
+            throw new IllegalStateException("BDS offline");
+        stdin.write(command);
+        stdin.newLine();
+        stdin.flush();
+        appendLog("> " + command + "\n");
+    }
+
     private synchronized void sendCommand(String command) {
         if (command == null || command.isBlank()) return;
+        if (stressBenchmark != null && stressBenchmark.isRunning()) {
+            appendLog("[bubble] Aguarde o término do Stress Test antes de outro comando.\n");
+            return;
+        }
         if (stdin == null || process == null || !process.isAlive()) {
             appendLog("[bubble] Servidor não está em execução.\n");
             return;
@@ -299,6 +357,7 @@ public class BdsService extends Service {
     }
 
     private synchronized void stopServerGracefully() {
+        if (stressBenchmark != null) stressBenchmark.cancel();
         if (process == null || !process.isAlive()) {
             setState("stopped", 0);
             stopSelf();
@@ -524,6 +583,7 @@ public class BdsService extends Service {
     }
 
     @Override public void onDestroy() {
+        if (stressBenchmark != null) stressBenchmark.cancel();
         releaseNetworkWatcher();
         handler.removeCallbacks(notificationTicker);
         try {
