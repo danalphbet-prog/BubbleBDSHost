@@ -17,6 +17,9 @@ public final class BubbleMembershipMonitor {
     private static final long QUERY_TIMEOUT_MS = 3_000;
     private final BubbleFirebaseSync sync;
     private final Sender sender;
+    private final BubbleApiStream apiStream;
+    private long lastPollAt;
+    private int lastMemberCount;
     private boolean waiting;
     private boolean collecting;
     private int bracketDepth;
@@ -25,9 +28,10 @@ public final class BubbleMembershipMonitor {
     private final StringBuilder payload = new StringBuilder();
     private long sentAt;
 
-    public BubbleMembershipMonitor(BubbleFirebaseSync sync, Sender sender) {
+    public BubbleMembershipMonitor(BubbleFirebaseSync sync, Sender sender, BubbleApiStream apiStream) {
         this.sync = sync;
         this.sender = sender;
+        this.apiStream = apiStream;
     }
 
     public synchronized void poll(boolean bdsOnline, boolean benchmarkRunning) {
@@ -35,6 +39,10 @@ public final class BubbleMembershipMonitor {
         if (!bdsOnline || benchmarkRunning || sync.bubbleDimension() < 0) return;
         long now = android.os.SystemClock.elapsedRealtime();
         if (waiting && now - sentAt < QUERY_TIMEOUT_MS) return;
+        // Idle BDS: 1 Hz. With Bubble members: 10 Hz (one in-flight query).
+        long interval = lastMemberCount > 0 ? 100L : 1000L;
+        if (now - lastPollAt < interval) return;
+        lastPollAt = now;
         clearParser();
         try {
             // No auto log echo. Parsing suppresses only this command's JSON output.
@@ -73,7 +81,9 @@ public final class BubbleMembershipMonitor {
                     || lower.contains("no target matched")
                     || lower.contains("no players found")) {
                 clearParser();
+                lastMemberCount = 0;
                 sync.onPlayersSnapshot(new HashSet<>());
+                apiStream.onSnapshot(new JSONArray(), sync.bubbleDimension());
                 return true;
             }
             return false;
@@ -112,7 +122,9 @@ public final class BubbleMembershipMonitor {
                     if (uuid.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"))
                         players.add(uuid);
                 }
+                lastMemberCount = players.size();
                 sync.onPlayersSnapshot(players);
+                apiStream.onSnapshot(result, dimension);
             } catch (Exception ignored) { /* Never write a partial/invalid snapshot. */ }
         }
     }

@@ -59,6 +59,19 @@ public final class BubbleFirebaseSync {
 
     public int bubbleDimension() { return numericDimension; }
 
+    // Local-only access for the authenticated API transport. No Admin key in APK.
+    public String firebaseIdToken() {
+        return System.currentTimeMillis() < prefs.getLong("token_expiry_ms", 0L) - 30000L
+                ? prefs.getString("id_token", "") : "";
+    }
+    public String bdsUid() { return prefs.getString("uid", ""); }
+    public String instanceId() { return instanceId; }
+    public boolean isMemberUploaded(String playerId) {
+        synchronized (lock) {
+            return online && uploadedMembers != null && uploadedMembers.contains(playerId);
+        }
+    }
+
     public void onServerOnline() {
         online = true;
         prefs.edit().putBoolean("presence_possible", true).apply();
